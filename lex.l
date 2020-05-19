@@ -3,7 +3,7 @@
 #include "keep.h"
 #include "y.tab.h"
 
-int nlines = 0;
+int nlines = 1;
 %}
 %option noyywrap
 
