@@ -2,12 +2,16 @@
 #include <time.h>
 #include "keep.h"
 #include "y.tab.h"
+
+int nlines = 0;
 %}
 %option noyywrap
 
 %%
 
-[ \t\n] { ; }
+#[^\n]*[\n] { ; }
+[ \t] { ; }
+[\n] { ++nlines; }
 ";" { return ';'; }
 [0-9][0-9][0-9][0-9][ ](jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[ ]([1-9]|1[0-9]|2[0-9]|3[01]) {
   strptime(yytext, "%d %b %y", &datetime);

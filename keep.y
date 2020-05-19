@@ -1,8 +1,14 @@
 %{
 #include <string.h>
 #include <time.h>
+#include <stdio.h>
+
+extern int nlines;
 
 enum { MAXSUB = 64, MAXACCT = 128 };
+
+static long totdr = 0.0;
+static long totcr = 0.0;
 
 struct account {
     char *name;
@@ -28,6 +34,7 @@ static int naccounts = 0;
 
 static time_t currdate;
 static char explanation[1024];
+static char trexplanation[1024];
 
 struct transaction {
     time_t date;
@@ -75,7 +82,7 @@ struct tm datetime;
 
 list: /* nothing */
     | list '\n'
-    | list transaction ';'
+    | list transaction ';' { /*if (totdr != totcr) { printf("totdr = %ld totcr = %ld\n", totdr, totcr); return yyerror("Total debits do not match total credits"); } */ }
     | list connections
     ;
 
@@ -83,10 +90,14 @@ connections: connections ARROW accountexpr { connect($1, $3); $$ = $3; }
            | accountexpr { $$ = $1; }
            ;
 
-accountexpr: accountexpr DEBIT NUMBER  { addtrans($1, newtrans(currdate, explanation, $3, 0.0)); $$ = $1; }
-| accountexpr CREDIT NUMBER { addtrans($1, newtrans(currdate, explanation, 0.0, $3)); $$ = $1; }
+accountexpr: accountexpr DEBIT NUMBER comment { totdr += (long) ($3 * 100); addtrans($1, newtrans(currdate, trexplanation, $3, 0.0)); $$ = $1; }
+| accountexpr CREDIT NUMBER comment { totcr += (long) ($3 * 100); addtrans($1, newtrans(currdate, trexplanation, 0.0, $3)); $$ = $1; }
            | account { $$ = $1; }
            ;
+
+comment: STRING { sprintf(trexplanation, "%s - %s", explanation, $1); }
+       | /* nothing */ { strcpy(trexplanation, explanation); }
+       ;
 
 account: ACCOUNT NAME STRING { $$ = newacct($2, $3); }
        | NAME { $$ = findacct($1); }
@@ -95,6 +106,7 @@ account: ACCOUNT NAME STRING { $$ = newacct($2, $3); }
 transaction: DATE STRING {
     currdate = $1;
     strcpy(explanation, $2);
+    totdr = totcr = 0.0;
 } accountexprs;
 
 accountexprs: accountexprs accountexpr;
@@ -103,7 +115,6 @@ accountexprs: accountexprs accountexpr;
 
 %%
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -155,12 +166,17 @@ print(account *acct, int level)
     }
 }
 
+static int error;
+
 int
 main(void)
 {
     int i;
     yyparse();
 
+    if (error) {
+        return EXIT_FAILURE;
+    }
     for (i = 0; i < naccounts; ++i) {
         if (accounts[i]->nparents == 0)
             print(accounts[i], 0);
@@ -172,7 +188,8 @@ main(void)
 int
 yyerror(const char *s)
 {
-    fprintf(stderr, "%s\n", s);
+    fprintf(stderr, "%d: %s\n", nlines, s);
+    error = 1;
     return 0;
 }
 
@@ -243,6 +260,7 @@ newtrans(time_t date, char *description, double debit, double credit)
         free(tr);
         return NULL;
     }
+    strcpy(tr->description, description);
     tr->debit = debit;
     tr->credit = credit;
     tr->next = NULL;
@@ -267,10 +285,10 @@ addtrans(account *acct, transaction *tr)
     acct->tr[acct->ntr++] = tr;
     if (tr->debit == 0.0) {
         acct->credit += tr->credit;
-        /* fprintf(stderr, "CR %.2f %s\n", tr->credit, acct->name); */
+        /* fprintf(stderr, "CR %.2f\t%s\t%s\n", tr->credit, acct->name, tr->description); */
     } else {
         acct->debit += tr->debit;
-        /* fprintf(stderr, "DR %.2f %s\n", tr->debit, acct->name); */
+        /* fprintf(stderr, "DR %.2f\t%s\t%s\n", tr->debit, acct->name, tr->description); */
     }
 }
 
