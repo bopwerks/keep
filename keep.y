@@ -17,12 +17,12 @@ extern int yylex(void);
 
 typedef struct transaction transaction;
 
-extern transaction * newtrans(struct tm *date, char *description, double debit, double credit);
+extern transaction * newtrans(struct tm *date, char *description, long debit, long credit);
 extern void addtrans(account *acct, transaction *tr);
 
 %}
 %union {
-    double val;
+    long val;
     char str[1024];
     struct account *acct;
 }
@@ -45,7 +45,9 @@ extern void addtrans(account *acct, transaction *tr);
 
 list: /* nothing */
     | list '\n'
-    | list transaction ';' { /*if (totdr != totcr) { printf("totdr = %ld totcr = %ld\n", totdr, totcr); return yyerror("Total debits do not match total credits"); } */ }
+    | list transaction ';' { if (totdr != totcr) {
+                               return yyerror("Total debits do not match total credits");
+                             } }
     | list connections
     ;
 
@@ -54,9 +56,11 @@ connections: connections ARROW accountexpr { account_connect($1, $3);
            | accountexpr { $$ = $1; }
            ;
 
-accountexpr: accountexpr DEBIT NUMBER comment { addtrans($1, newtrans(&currdate, trexplanation, $3, 0.0));
+accountexpr: accountexpr DEBIT NUMBER comment { totdr += $3;
+                                                addtrans($1, newtrans(&currdate, trexplanation, $3, 0.0));
                                                 $$ = $1; }
-           | accountexpr CREDIT NUMBER comment { addtrans($1, newtrans(&currdate, trexplanation, 0.0, $3));
+           | accountexpr CREDIT NUMBER comment { totcr += $3;
+                                                 addtrans($1, newtrans(&currdate, trexplanation, 0.0, $3));
                                                  $$ = $1; }
            | account { $$ = $1; }
            ;

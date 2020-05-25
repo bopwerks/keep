@@ -70,12 +70,12 @@ account_connect(account *parent, account *child)
     parent->accounts[parent->naccounts++] = child;
 }
 
-static double
+static long
 account_debits(account *acct, int year, int month)
 {
     period *yp;
     period *mp;
-    double total;
+    long total;
     int i;
 
     total = 0.0;
@@ -92,12 +92,12 @@ account_debits(account *acct, int year, int month)
     return total;
 }
 
-static double
+static long
 account_credits(account *acct, int year, int month)
 {
     period *yp;
     period *mp;
-    double total;
+    long total;
     int i;
 
     total = 0.0;
@@ -114,13 +114,13 @@ account_credits(account *acct, int year, int month)
     return total;
 }
 
-static double
+static long
 account_balance(account *acct, int year, int month)
 {
-    double dr;
-    double cr;
-    double min;
-    double max;
+    long dr;
+    long cr;
+    long min;
+    long max;
     
     dr = account_debits(acct, year, month);
     cr = account_credits(acct, year, month);
@@ -134,12 +134,17 @@ void
 account_print(account *acct, int year, int month, int level)
 {
     int i;
-    double bal;
+    long bal;
+    int dollars;
+    int cents;
 
     for (i = 0; i < level; ++i) {
         putchar('\t');
     }
-    printf("%s %.2f\n", acct->longname, account_balance(acct, year, month));
+    bal = account_balance(acct, year, month);
+    dollars = bal / 100;
+    cents = bal % 100;
+    printf("%s %d.%02d\n", acct->longname, dollars, cents);
     for (i = 0; i < acct->naccounts; ++i) {
         account_print(acct->accounts[i], year, month, level+1);
     }

@@ -6,8 +6,8 @@ enum {
 struct period {
     enum { MONTH, YEAR } type;
     int n;
-    double debits;
-    double credits;
+    long debits;
+    long credits;
     struct period *left; /* subperiod */
     struct period *right; /* next period */
 };

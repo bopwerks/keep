@@ -15,8 +15,8 @@ struct transaction {
     int month;
     int day;
     char *description;
-    double debit;
-    double credit;
+    long debit;
+    long credit;
     struct transaction *next;
 };
 typedef struct transaction transaction;
@@ -59,7 +59,7 @@ yyerror(const char *s)
 }
 
 transaction *
-newtrans(struct tm *date, char *description, double debit, double credit)
+newtrans(struct tm *date, char *description, long debit, long credit)
 {
     transaction *tr;
 

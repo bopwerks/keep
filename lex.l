@@ -4,6 +4,8 @@
 
 extern struct tm currdate;
 int nlines = 1;
+static int cents;
+static int i;
 %}
 %option noyywrap
 
@@ -19,7 +21,17 @@ int nlines = 1;
   /*fprintf(stderr, "DATE<%.*s>\n", (int) yyleng, yytext);*/
   return DATE;
 }
-[0-9]+\.?|[0-9]*\.[0-9]+ { sscanf(yytext, "%lf", &yylval.val); /*fprintf(stderr, "NUMBER<%lf>\n", yylval.val);*/ return NUMBER; }
+[0-9]+\.?|[0-9]*\.[0-9][0-9] { yylval.val = 0;
+                               for (i = 0; i < yyleng && yytext[i] != '.'; ++i) {
+                                 yylval.val = yylval.val * 10 + (yytext[i] - '0');
+                               }
+                               yylval.val *= 100;
+                               cents = 0;
+                               for (++i; i < yyleng; ++i) {
+                                 cents = cents * 10 + (yytext[i] - '0');
+                               }
+                               yylval.val += cents;
+                           /*sscanf(yytext, "%lf", &yylval.val); fprintf(stderr, "NUMBER<%lf>\n", yylval.val);*/ return NUMBER; }
 account { /*fprintf(stderr, "ACCOUNT\n");*/ return ACCOUNT; }
 ["]([^"\\]|\\.)*["] {
   /*fprintf(stderr, "STRING<%.*s>\n", (int) yyleng, yytext);*/
