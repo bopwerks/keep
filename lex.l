@@ -2,7 +2,7 @@
 #include <time.h>
 #include "y.tab.h"
 
-static struct tm datetime;
+extern struct tm currdate;
 int nlines = 1;
 %}
 %option noyywrap
@@ -14,8 +14,8 @@ int nlines = 1;
 [\n] { ++nlines; }
 ";" { return ';'; }
 [0-9][0-9][0-9][0-9][ ](jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[ ]([1-9]|1[0-9]|2[0-9]|3[01]) {
-  strptime(yytext, "%d %b %y", &datetime);
-  yylval.time = mktime(&datetime);
+  strptime(yytext, "%Y %b %d", &currdate);
+  /*yylval.time = mktime(&datetime);*/
   /*fprintf(stderr, "DATE<%.*s>\n", (int) yyleng, yytext);*/
   return DATE;
 }

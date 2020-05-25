@@ -1,7 +1,7 @@
 SHELL = /bin/sh
 YFLAGS = -d
 
-keep: keep.o lex.o account.o
+keep: keep.o lex.o account.o main.o
 lex.o: y.tab.h
 keep.o: keep.y
 

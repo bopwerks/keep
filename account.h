@@ -3,13 +3,24 @@ enum {
     MAXSUB = 64
 };
 
+struct period {
+    enum { MONTH, YEAR } type;
+    int n;
+    double debits;
+    double credits;
+    struct period *left; /* subperiod */
+    struct period *right; /* next period */
+};
+typedef struct period period;
+
+period* period_new(int yearmo);
+
 struct account {
     char *name;
     char *longname;
 
-    double debit;
-    double credit;
-    
+    period *year;
+
     struct account *accounts[MAXSUB];
     int naccounts;
 
@@ -23,6 +34,7 @@ typedef struct account account;
 extern account *accounts[MAXACCT];
 extern int naccounts;
 
+account* account_find(char *name);
 account* account_new(char *name, char *longname);
 void     account_connect(account *parent, account *child);
-void     account_print(account *acct, int level);
+void     account_print(account *acct, int year, int month, int level);

@@ -7,16 +7,6 @@
 account *accounts[MAXACCT];
 int naccounts = 0;
 
-struct period {
-    enum { MONTH, YEAR } type;
-    int n;
-    double debits;
-    double credits;
-    struct period *left; /* subperiod */
-    struct period *right; /* next period */
-};
-typedef struct period period;
-
 period *
 period_new(int yearmo)
 {
@@ -69,6 +59,7 @@ account_new(char *name, char *longname)
         return NULL;
     }
     accounts[naccounts++] = a;
+    a->year = NULL;
     return a;
 }
 
@@ -80,41 +71,59 @@ account_connect(account *parent, account *child)
 }
 
 static double
-account_debits(account *acct)
+account_debits(account *acct, int year, int month)
 {
+    period *yp;
+    period *mp;
     double total;
     int i;
 
-    total = acct->debit;
+    total = 0.0;
+    for (yp = acct->year; yp != NULL; yp = yp->right) {
+        for (mp = yp->left; mp != NULL; mp = mp->right) {
+            if ((year == 0 || yp->n == year) && (month == 0 || mp->n == month)) {
+                total += mp->debits;
+            }
+        }
+    }
     for (i = 0; i < acct->naccounts; ++i) {
-        total += account_debits(acct->accounts[i]);
+        total += account_debits(acct->accounts[i], year, month);
     }
     return total;
 }
 
 static double
-account_credits(account *acct)
+account_credits(account *acct, int year, int month)
 {
+    period *yp;
+    period *mp;
     double total;
     int i;
 
-    total = acct->credit;
+    total = 0.0;
+    for (yp = acct->year; yp != NULL; yp = yp->right) {
+        for (mp = yp->left; mp != NULL; mp = mp->right) {
+            if ((year == 0 || yp->n == year) && (month == 0 || mp->n == month)) {
+                total += mp->credits;
+            }
+        }
+    }
     for (i = 0; i < acct->naccounts; ++i) {
-        total += account_credits(acct->accounts[i]);
+        total += account_credits(acct->accounts[i], year, month);
     }
     return total;
 }
 
 static double
-account_balance(account *acct)
+account_balance(account *acct, int year, int month)
 {
     double dr;
     double cr;
     double min;
     double max;
     
-    dr = account_debits(acct);
-    cr = account_credits(acct);
+    dr = account_debits(acct, year, month);
+    cr = account_credits(acct, year, month);
     min = (dr > cr) ? cr : dr;
     max = (dr > cr) ? dr : cr;
 
@@ -122,19 +131,30 @@ account_balance(account *acct)
 }
 
 void
-account_print(account *acct, int level)
+account_print(account *acct, int year, int month, int level)
 {
     int i;
-    double dr;
-    double cr;
-    double min;
-    double max;
+    double bal;
 
     for (i = 0; i < level; ++i) {
         putchar('\t');
     }
-    printf("%s %.2f\n", acct->longname, account_balance(acct));
+    printf("%s %.2f\n", acct->longname, account_balance(acct, year, month));
     for (i = 0; i < acct->naccounts; ++i) {
-        account_print(acct->accounts[i], level+1);
+        account_print(acct->accounts[i], year, month, level+1);
     }
+}
+
+account *
+account_find(char *name)
+{
+    int i;
+
+    /* fprintf(stderr, "Looking for account '%s'\n", name); */
+    for (i = 0; i < naccounts; ++i) {
+        if (strcmp(accounts[i]->name, name) == 0)
+            return accounts[i];
+    }
+    fprintf(stderr, "Can't find account: %s\n", name);
+    return NULL;
 }
