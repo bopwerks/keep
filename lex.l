@@ -1,8 +1,8 @@
 %{
 #include <time.h>
-#include "keep.h"
 #include "y.tab.h"
 
+static struct tm datetime;
 int nlines = 1;
 %}
 %option noyywrap

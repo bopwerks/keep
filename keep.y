@@ -2,35 +2,14 @@
 #include <string.h>
 #include <time.h>
 #include <stdio.h>
+#include "account.h"
 
 extern int nlines;
-
-enum { MAXSUB = 64, MAXACCT = 128 };
 
 static long totdr = 0.0;
 static long totcr = 0.0;
 
-struct account {
-    char *name;
-    char *longname;
-
-    double debit;
-    double credit;
-    
-    struct account *accounts[MAXSUB];
-    int naccounts;
-
-    int nparents;
-    struct transaction **tr;
-    int ntr;
-    int trcap;
-};
-typedef struct account account;
-
 static struct account *curacct = NULL;
-
-static account *accounts[MAXACCT];
-static int naccounts = 0;
 
 static time_t currdate;
 static char explanation[1024];
@@ -48,13 +27,9 @@ typedef struct transaction transaction;
 static int yyerror(const char *s);
 int yylex(void);
 
-static void connect(account *parent, account *child);
-static account * newacct(char *name, char *longname);
 static account * findacct(char *name);
 static transaction * newtrans(time_t date, char *description, double debit, double credit);
 static void addtrans(account *acct, transaction *tr);
-
-struct tm datetime;
 
 %}
 %union {
@@ -86,7 +61,7 @@ list: /* nothing */
     | list connections
     ;
 
-connections: connections ARROW accountexpr { connect($1, $3); $$ = $3; }
+connections: connections ARROW accountexpr { account_connect($1, $3); $$ = $3; }
            | accountexpr { $$ = $1; }
            ;
 
@@ -99,7 +74,7 @@ comment: STRING { sprintf(trexplanation, "%s - %s", explanation, $1); }
        | /* nothing */ { strcpy(trexplanation, explanation); }
        ;
 
-account: ACCOUNT NAME STRING { $$ = newacct($2, $3); }
+account: ACCOUNT NAME STRING { $$ = account_new($2, $3); }
        | NAME { $$ = findacct($1); }
        ;
 
@@ -118,54 +93,6 @@ accountexprs: accountexprs accountexpr;
 #include <stdlib.h>
 #include <string.h>
 
-double
-debits(account *acct)
-{
-    double total;
-    int i;
-
-    total = acct->debit;
-    for (i = 0; i < acct->naccounts; ++i) {
-        total += debits(acct->accounts[i]);
-    }
-    return total;
-}
-
-double
-credits(account *acct)
-{
-    double total;
-    int i;
-
-    total = acct->credit;
-    for (i = 0; i < acct->naccounts; ++i) {
-        total += credits(acct->accounts[i]);
-    }
-    return total;
-}
-
-void
-print(account *acct, int level)
-{
-    int i;
-    double dr;
-    double cr;
-    double min;
-    double max;
-
-    for (i = 0; i < level; ++i) {
-        putchar('\t');
-    }
-    dr = debits(acct);
-    cr = credits(acct);
-    min = (dr > cr) ? cr : dr;
-    max = (dr > cr) ? dr : cr;
-    printf("%s %.2f\n", acct->longname, max - min);
-    for (i = 0; i < acct->naccounts; ++i) {
-        print(acct->accounts[i], level+1);
-    }
-}
-
 static int error;
 
 int
@@ -179,7 +106,7 @@ main(void)
     }
     for (i = 0; i < naccounts; ++i) {
         if (accounts[i]->nparents == 0)
-            print(accounts[i], 0);
+            account_print(accounts[i], 0);
         /* printf("%s \"%s\"\n", accounts[i]->name, accounts[i]->longname); */
     }
     return EXIT_SUCCESS;
@@ -191,44 +118,6 @@ yyerror(const char *s)
     fprintf(stderr, "%d: %s\n", nlines, s);
     error = 1;
     return 0;
-}
-
-account *
-newacct(char *name, char *longname)
-{
-    account *a;
-
-    /* fprintf(stderr, "Creating new account '%s'\n", name); */
-    a = malloc(sizeof *a);
-    if (a == NULL) {
-        return NULL;
-    }
-    a->name = malloc(strlen(name) + 1);
-    if (a->name == NULL) {
-        free(a);
-        return NULL;
-    }
-    strcpy(a->name, name);
-    a->longname = malloc(strlen(longname) + 1);
-    if (a->longname == NULL) {
-        free(a->name);
-        free(a);
-        return NULL;
-    }
-    strcpy(a->longname, longname);
-    a->ntr = 0;
-    a->trcap = 1;
-    a->naccounts = 0;
-    a->nparents = 0;
-    a->tr = malloc(sizeof *(a->tr) * a->trcap);
-    if (a->tr == NULL) {
-        free(a->longname);
-        free(a->name);
-        free(a);
-        return NULL;
-    }
-    accounts[naccounts++] = a;
-    return a;
 }
 
 account *
@@ -290,11 +179,4 @@ addtrans(account *acct, transaction *tr)
         acct->debit += tr->debit;
         /* fprintf(stderr, "DR %.2f\t%s\t%s\n", tr->debit, acct->name, tr->description); */
     }
-}
-
-void
-connect(account *parent, account *child)
-{
-    child->nparents += 1;
-    parent->accounts[parent->naccounts++] = child;
 }
