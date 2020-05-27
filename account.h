@@ -36,5 +36,6 @@ extern int naccounts;
 
 account* account_find(char *name);
 account* account_new(char *name, char *longname);
+long     account_balance(account *acct, int year, int month);
 void     account_connect(account *parent, account *child);
 void     account_print(account *acct, int year, int month, int level);

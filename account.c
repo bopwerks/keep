@@ -114,7 +114,7 @@ account_credits(account *acct, int year, int month)
     return total;
 }
 
-static long
+long
 account_balance(account *acct, int year, int month)
 {
     long dr;
@@ -138,15 +138,17 @@ account_print(account *acct, int year, int month, int level)
     int dollars;
     int cents;
 
-    for (i = 0; i < level; ++i) {
-        putchar('\t');
-    }
     bal = account_balance(acct, year, month);
-    dollars = bal / 100;
-    cents = bal % 100;
-    printf("%s %d.%02d\n", acct->longname, dollars, cents);
-    for (i = 0; i < acct->naccounts; ++i) {
-        account_print(acct->accounts[i], year, month, level+1);
+    if (bal > 0) {
+        dollars = bal / 100;
+        cents = bal % 100;
+        for (i = 0; i < level; ++i) {
+            putchar('\t');
+        }
+        printf("%s %d.%02d\n", acct->longname, dollars, cents);
+        for (i = 0; i < acct->naccounts; ++i) {
+            account_print(acct->accounts[i], year, month, level+1);
+        }
     }
 }
 
