@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <errno.h>
+#include "transaction.h"
 #include "account.h"
 
 extern int naccounts;
@@ -10,50 +12,137 @@ extern int nlines;
 
 static struct account *curacct = NULL;
 
-struct transaction {
-    int year;
-    int month;
-    int day;
-    char *description;
-    long debit;
-    long credit;
-    struct transaction *next;
-};
-typedef struct transaction transaction;
-
 static int error;
 
 extern void yyparse(void);
+extern FILE *yyin;
+
+static char *progname;
+static char *filename;
+
+static void print_statements(int year, int month);
+
+static int
+cmptr(const void *a, const void *b)
+{
+    transaction *x;
+    transaction *y;
+
+    x = *((transaction **) a);
+    y = *((transaction **) b);
+
+    if (x->year != y->year)
+        return x->year - y->year;
+    if (x->month != y->month)
+        return x->month - y->month;
+    return x->day - y->day;
+}
 
 int
 main(int argc, char *argv[])
 {
+    transaction *tr;
+    account *acct;
     int i;
+    int j;
     int year;
     int month;
+    time_t clock;
+    struct tm *tm;
 
-    year = 0;
-    month = 0;
-    if (argc == 3) {
-        year = strtol(argv[1], NULL, 10);
-        month = strtol(argv[2], NULL, 10);
+    time(&clock);
+    tm = localtime(&clock);
+
+    year = tm->tm_year + 1900;
+    month = tm->tm_mon+1;
+    progname = argv[0];
+    filename = argv[1];
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s journal-file ...\n", argv[0]);
+        return EXIT_FAILURE;
+    }
+    if (argc == 4) {
+        year = strtol(argv[2], NULL, 10);
+        month = strtol(argv[3], NULL, 10);
+    }
+    yyin = fopen(argv[1], "r");
+    if (yyin == NULL) {
+        fprintf(stderr, "%s: %s\n", argv[0], strerror(errno));
+        return EXIT_FAILURE;
     }
     yyparse();
     if (error) {
         return EXIT_FAILURE;
     }
     for (i = 0; i < naccounts; ++i) {
-        if (accounts[i]->nparents == 0)
-            account_print(accounts[i], year, month, 0);
+        acct = accounts[i];
+        qsort(acct->tr, acct->ntr, sizeof *(acct->tr), cmptr);
+        for (j = 0, tr = acct->tr[j]; j < acct->ntr; tr = acct->tr[++j]) {
+            tr->totaldebits = tr->debit;
+            tr->totalcredits = tr->credit;
+            if (j > 0) {
+                tr->totaldebits += acct->tr[j-1]->totaldebits;
+                tr->totalcredits += acct->tr[j-1]->totalcredits;
+            }
+        }
+        /* if (acct->nparents == 0) */
+        /*     account_print(acct, year, month, 0); */
         /* printf("%s \"%s\"\n", accounts[i]->name, accounts[i]->longname); */
     }
+    print_statements(year, month);
     return EXIT_SUCCESS;
+}
+
+static void
+print_statements(int year, int month)
+{
+    int i;
+    account *acct;
+    puts("# Financial Report");
+    puts("");
+    puts("## Balance Sheet");
+    puts("");
+    puts("### Assets");
+    puts("");
+    for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) {
+        if (acct->type != ASSET || acct->nparents != 0)
+            continue;
+        account_print(acct, year, month, 0);
+    }
+    puts("");
+    puts("### Liabilities");
+    puts("");
+    for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) {
+        if (acct->type != LIABILITY || acct->nparents != 0)
+            continue;
+        account_print(acct, year, month, 0);
+    }
+    /* TODO: Display net worth */
+    puts("");
+    puts("## Income Statement");
+    puts("");
+    puts("### Income");
+    puts("");
+    for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) {
+        if (acct->type != INCOME || acct->nparents != 0)
+            continue;
+        account_print(acct, year, month, 0);
+    }
+    puts("");
+    puts("### Expenses");
+    puts("");
+    for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) {
+        if (acct->type != EXPENSE || acct->nparents != 0)
+            continue;
+        account_print(acct, year, month, 0);
+    }
+    /* TODO: Display cashflow */
 }
 
 int
 yyerror(const char *s)
 {
-    fprintf(stderr, "%d: %s\n", nlines, s);
+    fprintf(stderr, "%s:%d: %s\n", filename, nlines, s);
     error = 1;
     return 0;
 }
@@ -79,7 +168,8 @@ newtrans(struct tm *date, char *description, long debit, long credit)
     strcpy(tr->description, description);
     tr->debit = debit;
     tr->credit = credit;
-    tr->next = NULL;
+    tr->totaldebits = 0;
+    tr->totalcredits = 0;
     return tr;
 }
 

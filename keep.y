@@ -26,11 +26,11 @@ extern void addtrans(account *acct, transaction *tr);
     char str[1024];
     struct account *acct;
 }
-%token ACCOUNT
 %token DATE
 %token ARROW
 %token CREDIT
 %token DEBIT
+%token <val> ACCOUNT
 %token <str> STRING
 %token <val> NUMBER
 %token <str> NAME
@@ -51,7 +51,7 @@ list: /* nothing */
     | list connections
     ;
 
-connections: connections ARROW accountexpr { account_connect($1, $3);
+connections: connections ARROW accountexpr { if ($1->type != $3->type) yyerror("Can't connect different account types"); account_connect($1, $3);
                                              $$ = $3; }
            | accountexpr { $$ = $1; }
            ;
@@ -69,7 +69,7 @@ comment: STRING { sprintf(trexplanation, "%s - %s", explanation, $1); }
        | /* nothing */ { strcpy(trexplanation, explanation); }
        ;
 
-account: ACCOUNT NAME STRING { $$ = account_new($2, $3); }
+account: ACCOUNT NAME STRING { $$ = account_new($1, $2, $3); }
        | NAME { $$ = account_find($1); }
        ;
 

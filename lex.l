@@ -1,7 +1,9 @@
 %{
 #include <time.h>
+#include "account.h"
 #include "y.tab.h"
 
+FILE *yyin;
 extern struct tm currdate;
 int nlines = 1;
 static int cents;
@@ -32,7 +34,10 @@ static int i;
                                }
                                yylval.val += cents;
                            /*sscanf(yytext, "%lf", &yylval.val); fprintf(stderr, "NUMBER<%lf>\n", yylval.val);*/ return NUMBER; }
-account { /*fprintf(stderr, "ACCOUNT\n");*/ return ACCOUNT; }
+asset { yylval.val = ASSET; return ACCOUNT; }
+liability { yylval.val = LIABILITY; return ACCOUNT; }
+income { yylval.val = INCOME; return ACCOUNT; }
+expense { yylval.val = EXPENSE; return ACCOUNT; }
 ["]([^"\\]|\\.)*["] {
   /*fprintf(stderr, "STRING<%.*s>\n", (int) yyleng, yytext);*/
   strncpy(yylval.str, yytext+1, yyleng-2);

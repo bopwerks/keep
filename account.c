@@ -3,6 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include "account.h"
+#include "transaction.h"
 
 account *accounts[MAXACCT];
 int naccounts = 0;
@@ -25,7 +26,7 @@ period_new(int yearmo)
 }
 
 account *
-account_new(char *name, char *longname)
+account_new(account_type type, char *name, char *longname)
 {
     account *a;
 
@@ -34,6 +35,7 @@ account_new(char *name, char *longname)
     if (a == NULL) {
         return NULL;
     }
+    a->type = type;
     a->name = malloc(strlen(name) + 1);
     if (a->name == NULL) {
         free(a);
@@ -73,19 +75,25 @@ account_connect(account *parent, account *child)
 static long
 account_debits(account *acct, int year, int month)
 {
-    period *yp;
-    period *mp;
+    /* period *yp; */
+    /* period *mp; */
     long total;
     int i;
+    transaction *tr;
 
-    total = 0.0;
-    for (yp = acct->year; yp != NULL; yp = yp->right) {
-        for (mp = yp->left; mp != NULL; mp = mp->right) {
-            if ((year == 0 || yp->n == year) && (month == 0 || mp->n == month)) {
-                total += mp->debits;
-            }
+    for (total = i = 0, tr = acct->tr[i]; i < acct->ntr; tr = acct->tr[++i]) {
+        if (tr->year == year && tr->month == month) {
+            total += tr->debit;
         }
     }
+    /* total = (acct->ntr > 0) ? acct->tr[acct->ntr-1]->totaldebits : 0; */
+    /* for (yp = acct->year; yp != NULL; yp = yp->right) { */
+    /*     for (mp = yp->left; mp != NULL; mp = mp->right) { */
+    /*         if ((year == 0 || yp->n == year) && (month == 0 || mp->n == month)) { */
+    /*             total += mp->debits; */
+    /*         } */
+    /*     } */
+    /* } */
     for (i = 0; i < acct->naccounts; ++i) {
         total += account_debits(acct->accounts[i], year, month);
     }
@@ -95,23 +103,75 @@ account_debits(account *acct, int year, int month)
 static long
 account_credits(account *acct, int year, int month)
 {
-    period *yp;
-    period *mp;
+    /* period *yp; */
+    /* period *mp; */
     long total;
     int i;
 
-    total = 0.0;
-    for (yp = acct->year; yp != NULL; yp = yp->right) {
-        for (mp = yp->left; mp != NULL; mp = mp->right) {
-            if ((year == 0 || yp->n == year) && (month == 0 || mp->n == month)) {
-                total += mp->credits;
-            }
-        }
-    }
+    total = (acct->ntr > 0) ? acct->tr[acct->ntr-1]->totalcredits : 0;
+    /* for (yp = acct->year; yp != NULL; yp = yp->right) { */
+    /*     for (mp = yp->left; mp != NULL; mp = mp->right) { */
+    /*         if ((year == 0 || yp->n == year) && (month == 0 || mp->n == month)) { */
+    /*             total += mp->debits; */
+    /*         } */
+    /*     } */
+    /* } */
     for (i = 0; i < acct->naccounts; ++i) {
         total += account_credits(acct->accounts[i], year, month);
     }
     return total;
+}
+
+static void
+account_flow_rec(account *acct, int year, int month, long *dr, long *cr)
+{
+    int i;
+    transaction *tr;
+    
+    for (i = 0, tr = acct->tr[i]; i < acct->ntr; tr = acct->tr[++i]) {
+        if ((year == 0 || tr->year == year) && (month == 0 || tr->month == month)) {
+            *dr += tr->debit;
+            *cr += tr->credit;
+        }
+    }
+    for (i = 0; i < acct->naccounts; ++i) {
+        account_flow_rec(acct->accounts[i], year, month, dr, cr);
+    }
+}
+
+long
+account_flow(account *acct, int year, int month)
+{
+    long dr;
+    long cr;
+    long min;
+    long max;
+
+    dr = cr = 0;
+    account_flow_rec(acct, year, month, &dr, &cr);
+    /* dr = account_debits(acct, year, month); */
+    /* cr = account_credits(acct, year, month); */
+    min = (dr > cr) ? cr : dr;
+    max = (dr > cr) ? dr : cr;
+
+    return max - min;
+}
+
+static void
+account_balance_rec(account *acct, int year, int month, long *dr, long *cr)
+{
+    int i;
+    transaction *tr;
+    
+    for (i = 0, tr = acct->tr[i]; i < acct->ntr; tr = acct->tr[++i]) {
+        if ((year == 0 || tr->year <= year) && (month == 0 || tr->month <= month)) {
+            *dr += tr->debit;
+            *cr += tr->credit;
+        }
+    }
+    for (i = 0; i < acct->naccounts; ++i) {
+        account_flow_rec(acct->accounts[i], year, month, dr, cr);
+    }
 }
 
 long
@@ -121,9 +181,11 @@ account_balance(account *acct, int year, int month)
     long cr;
     long min;
     long max;
-    
-    dr = account_debits(acct, year, month);
-    cr = account_credits(acct, year, month);
+
+    dr = cr = 0;
+    account_balance_rec(acct, year, month, &dr, &cr);
+    /* dr = account_debits(acct, year, month); */
+    /* cr = account_credits(acct, year, month); */
     min = (dr > cr) ? cr : dr;
     max = (dr > cr) ? dr : cr;
 
@@ -138,17 +200,37 @@ account_print(account *acct, int year, int month, int level)
     int dollars;
     int cents;
 
-    bal = account_balance(acct, year, month);
-    if (bal > 0) {
-        dollars = bal / 100;
-        cents = bal % 100;
-        for (i = 0; i < level; ++i) {
-            putchar('\t');
-        }
-        printf("%s %d.%02d\n", acct->longname, dollars, cents);
-        for (i = 0; i < acct->naccounts; ++i) {
-            account_print(acct->accounts[i], year, month, level+1);
-        }
+    switch (acct->type) {
+    case ASSET:
+    case LIABILITY:
+        bal = account_balance(acct, year, month);
+        /* if (bal > 0) { */
+            dollars = bal / 100;
+            cents = bal % 100;
+            for (i = 0; i < level; ++i) {
+                putchar('\t');
+            }
+            printf("%s %d.%02d\n", acct->longname, dollars, cents);
+            for (i = 0; i < acct->naccounts; ++i) {
+                account_print(acct->accounts[i], year, month, level+1);
+            }
+        /* } */
+        break;
+    case EXPENSE:
+    case INCOME:
+        bal = account_flow(acct, year, month);
+        /* if (bal > 0) { */
+            dollars = bal / 100;
+            cents = bal % 100;
+            for (i = 0; i < level; ++i) {
+                putchar('\t');
+            }
+            printf("%s %d.%02d\n", acct->longname, dollars, cents);
+            for (i = 0; i < acct->naccounts; ++i) {
+                account_print(acct->accounts[i], year, month, level+1);
+            }
+        /* } */
+        break;
     }
 }
 

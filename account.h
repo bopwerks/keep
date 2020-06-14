@@ -3,6 +3,14 @@ enum {
     MAXSUB = 64
 };
 
+enum account_type {
+    ASSET,
+    LIABILITY,
+    INCOME,
+    EXPENSE
+};
+typedef enum account_type account_type;
+
 struct period {
     enum { MONTH, YEAR } type;
     int n;
@@ -16,6 +24,8 @@ typedef struct period period;
 period* period_new(int yearmo);
 
 struct account {
+    account_type type;
+    
     char *name;
     char *longname;
 
@@ -35,7 +45,7 @@ extern account *accounts[MAXACCT];
 extern int naccounts;
 
 account* account_find(char *name);
-account* account_new(char *name, char *longname);
+account* account_new(account_type type, char *name, char *longname);
 long     account_balance(account *acct, int year, int month);
 void     account_connect(account *parent, account *child);
 void     account_print(account *acct, int year, int month, int level);
