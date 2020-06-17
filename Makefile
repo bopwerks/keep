@@ -1,7 +1,8 @@
 SHELL = /bin/sh
 YFLAGS = -d
+CFLAGS = -g
 
-keep: keep.o lex.o account.o main.o
+keep: keep.o lex.o account.o main.o track.o util.o
 lex.o: y.tab.h
 keep.o: keep.y
 

@@ -1,6 +1,7 @@
 %{
 #include <time.h>
 #include "account.h"
+#include "track.h"
 #include "y.tab.h"
 
 FILE *yyin;
@@ -23,7 +24,7 @@ static int i;
   /*fprintf(stderr, "DATE<%.*s>\n", (int) yyleng, yytext);*/
   return DATE;
 }
-[0-9]+\.?|[0-9]*\.[0-9][0-9] { yylval.val = 0;
+[0-9]+\.?|[0-9]*\.[0-9][0-9] { /*yylval.val = 0;
                                for (i = 0; i < yyleng && yytext[i] != '.'; ++i) {
                                  yylval.val = yylval.val * 10 + (yytext[i] - '0');
                                }
@@ -32,8 +33,11 @@ static int i;
                                for (++i; i < yyleng; ++i) {
                                  cents = cents * 10 + (yytext[i] - '0');
                                }
-                               yylval.val += cents;
+                               yylval.val += cents;*/
+                               strncpy(yylval.str, yytext, yyleng);
+                               yylval.str[yyleng] = '\0';
                            /*sscanf(yytext, "%lf", &yylval.val); fprintf(stderr, "NUMBER<%lf>\n", yylval.val);*/ return NUMBER; }
+"track" { return TRACK; }
 asset { yylval.val = ASSET; return ACCOUNT; }
 liability { yylval.val = LIABILITY; return ACCOUNT; }
 income { yylval.val = INCOME; return ACCOUNT; }
@@ -44,9 +48,10 @@ expense { yylval.val = EXPENSE; return ACCOUNT; }
   yylval.str[yyleng-2] = '\0';
   return STRING;
 }
+[+-/*^()] { return *yytext; }
 "dr" { /*fprintf(stderr, "DEBIT\n");*/ return DEBIT; }
 "cr" { /*fprintf(stderr, "CREDIT\n");*/ return CREDIT; }
-[a-zA-Z][a-zA-Z0-9-]* {
+[a-zA-Z][a-zA-Z0-9_]* {
   /*fprintf(stderr, "NAME<%.*s>\n", (int) yyleng, yytext);*/
   strncpy(yylval.str, yytext, yyleng);
   yylval.str[yyleng] = '\0';
