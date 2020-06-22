@@ -10,38 +10,37 @@
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 
-double
-eval(expr *e, time_t date, int *ok)
+static double
+eval(expr *e, int y, int m, int *ok)
 {
     double left;
     double right;
     /* expr_print(stderr, e); */
     switch (e->type) {
     case EXPR_ADD:
-        left = eval(e->left, date, ok);
-        right = eval(e->right, date, ok);
+        left = eval(e->left, y, m, ok);
+        right = eval(e->right, y, m, ok);
         return left + right;
     case EXPR_SUB:
-        left = eval(e->left, date, ok);
-        right = eval(e->right, date, ok);
+        left = eval(e->left, y, m, ok);
+        right = eval(e->right, y, m, ok);
         return left - right;
     case EXPR_MUL:
-        left = eval(e->left, date, ok);
-        right = eval(e->right, date, ok);
+        left = eval(e->left, y, m, ok);
+        right = eval(e->right, y, m, ok);
         return left * right;
     case EXPR_DIV:
-        left = eval(e->left, date, ok);
-        right = eval(e->right, date, ok);
+        left = eval(e->left, y, m, ok);
+        right = eval(e->right, y, m, ok);
         return left / right;
     case EXPR_EXP:
-        left = eval(e->left, date, ok);
-        right = eval(e->right, date, ok);
+        left = eval(e->left, y, m, ok);
+        right = eval(e->right, y, m, ok);
         return pow(left, right);
     case EXPR_NUM:
         return e->ival;
     case EXPR_ID:
-        left = account_eval(e->aval, date, ok);
-        return left;
+        return e->aval->eval(e->aval, y, m, ok);
     }
 }
 
@@ -114,7 +113,7 @@ intersect(range *a, range *b)
 {
     range r;
 
-    if (a->end - a->start <= 0) {
+    if (a->end - a->start < 0) {
         r.start = r.end = 0;
     } else {
         r.start = max(a->start, b->start);
@@ -133,7 +132,7 @@ print_range(range *r)
     ctime_r(&r->start, buf1);
     ctime_r(&r->end, buf2);
 
-    printf("[%s, %s]", buf1, buf2);
+    fprintf(stderr, "[%s, %s]", buf1, buf2);
 }
 
 range
@@ -141,7 +140,6 @@ expr_range(expr *e)
 {
     range a, b;
     range r;
-    /* TODO: Choose representation for empty and nonempty ranges */
     /* An empty range r is one where r.end - r.start <= 0 */
     switch (e->type) {
     case EXPR_ADD:
@@ -171,6 +169,12 @@ expr_range(expr *e)
     return r;
 }
 
+static double
+eval_var(account *a, int y, int m, int *found)
+{
+    return eval(a->exp, y, m, found);
+}
+
 account *
 tracker_new(char *name, char *longname, expr *e)
 {
@@ -187,5 +191,6 @@ tracker_new(char *name, char *longname, expr *e)
     }
     a->typ = VAR;
     a->exp = e;
+    a->eval = eval_var;
     return a;
 }

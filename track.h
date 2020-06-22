@@ -27,7 +27,7 @@ struct range {
 };
 typedef struct range range;
 
-double eval(expr *e, time_t date, int *ok);
+/* double eval(expr *e, time_t date, int *ok); */
 expr *expr_new(expr_type type, account *aval, long ival, expr *left, expr *right);
 account *tracker_new(char *name, char *longname, expr *e);
 void expr_print(FILE *fp, expr *e);

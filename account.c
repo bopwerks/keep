@@ -19,25 +19,31 @@ static void bin_var(account *a);
 static void bin_income(account *a);
 static void bin_asset(account *a);
 
+static double eval_expense_income(account *a, int y, int m, int *found);
+
 account *
 account_new(account_type type, char *name, char *longname)
 {
     account *a;
     account *parent;
 
-    fprintf(stderr, "Creating new account '%s'\n", name);
+    /* fprintf(stderr, "Creating new account '%s'\n", name); */
     a = calloc(1, sizeof *a);
     if (a == NULL) {
         return NULL;
     }
     a->typ = ACCT;
     a->type = type;
+    switch (a->type) {
+    case EXPENSE:
+    case INCOME:
+        a->eval = eval_expense_income;
+        break;
+    default:
+        break;
+    }
     a->mindate = 0;
     a->maxdate = 0;
-    if (a->type == EXPENSE || a->type == INCOME)
-        a->bin = bin_income;
-    else
-        a->bin = bin_asset;
     a->name = malloc(strlen(name) + 1);
     if (a->name == NULL) {
         free(a);
@@ -76,7 +82,7 @@ account_new(account_type type, char *name, char *longname)
 int
 account_connect(account *parent, account *child)
 {
-    fprintf(stderr, "Connecting %s <- %s\n", parent->name, child->name);
+    /* fprintf(stderr, "Connecting %s <- %s\n", parent->name, child->name); */
     if (child->parent != NULL) {
         fprintf(stderr, "Account %s already has parent %s\n", child->name, parent->name);
         return 0;
@@ -162,8 +168,11 @@ account_find(char *name)
 {
     int i;
 
+    assert(name != NULL);
     /* fprintf(stderr, "Looking for account '%s'\n", name); */
     for (i = 0; i < naccounts; ++i) {
+        assert(accounts[i] != NULL);
+        assert(accounts[i]->name != NULL);
         if (strcmp(accounts[i]->name, name) == 0)
             return accounts[i];
     }
@@ -171,26 +180,26 @@ account_find(char *name)
     return NULL;
 }
 
-double
-account_eval(account *acct, time_t date, int *ok)
-{
-    double rval;
-    long bal;
-    long dollars;
-    long cents;
-    switch (acct->typ) {
-    case ACCT:
-        bal = account_balance(acct, date, ok);
-        dollars = bal / 100;
-        cents = bal % 100;
-        rval = dollars + (cents / 100.0);
-        return rval;
-    case VAR:
-        return eval(acct->exp, date, ok);
-    case NUM:
-        return acct->dval;
-    }
-}
+/* double */
+/* account_eval(account *acct, time_t date, int *ok) */
+/* { */
+/*     double rval; */
+/*     long bal; */
+/*     long dollars; */
+/*     long cents; */
+/*     switch (acct->typ) { */
+/*     case ACCT: */
+/*         bal = account_balance(acct, date, ok); */
+/*         dollars = bal / 100; */
+/*         cents = bal % 100; */
+/*         rval = dollars + (cents / 100.0); */
+/*         return rval; */
+/*     case VAR: */
+/*         return eval(acct->exp, date, ok); */
+/*     case NUM: */
+/*         return acct->dval; */
+/*     } */
+/* } */
 
 static void
 bin_var(account *a)
@@ -279,6 +288,23 @@ find_bucket(account *a, time_t date)
     }
 }
 
+static bucket *
+find_bucket_by_key(account *a, int y, int m)
+{
+    int key;
+    bucket **rval;
+
+    key = y * 100 + m;
+    rval = bsearch((void *) &key, a->buckets, a->nbuckets, sizeof *(a->buckets), cmp);
+    if (rval == NULL) {
+        /* fprintf(stderr, "Can't find key %d in account %s\n", key, a->name); */
+        return NULL;
+    } else {
+        /* fprintf(stderr, "Found key %d in %s\n", key, a->name); */
+        return *rval;
+    }
+}
+
 static int
 cmpbucket(bucket *a, bucket *b)
 {
@@ -336,4 +362,17 @@ account_bin(account *a, time_t date, long dr, long cr)
     /* fprintf(stderr, "Updated bucket %d for account %s\n", b->key, a->name); */
     b->dr += dr;
     b->cr += cr;
+}
+
+static double
+eval_expense_income(account *a, int y, int m, int *found)
+{
+    bucket *b;
+    long bal;
+    
+    b = find_bucket_by_key(a, y, m);
+    if (found != NULL) {
+        *found = (b != NULL);
+    }
+    return ((b == NULL) ? 0.0 : max(b->dr, b->cr) - min(b->dr, b->cr)) / 100.0;
 }

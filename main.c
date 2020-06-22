@@ -57,7 +57,7 @@ connect(void)
     }
 }
 
-static int plot(char *varname, int year, int month);
+static int plot(char *argv[], int argc);
 
 static void
 tr_print(account *a, transaction *t)
@@ -163,13 +163,14 @@ main(int argc, char *argv[])
     for (i = 0; i < naccounts; ++i) {
         struct tm tm;
         acct = accounts[i];
-        puts(acct->name);
+        fputs(acct->name, stderr);
+        fputs("\n", stderr);
         localtime_r(&acct->mindate, &tm);
         strftime(buf1, sizeof buf1, "%Y %b %d", &tm);
         localtime_r(&acct->maxdate, &tm);
         strftime(buf2, sizeof buf2, "%Y %b %d", &tm);
-        printf("range %s (%ld) to %s (%ld)\n", buf1, acct->mindate, buf2, acct->maxdate);
-        puts("");
+        fprintf(stderr, "range %s (%ld) to %s (%ld)\n", buf1, acct->mindate, buf2, acct->maxdate);
+        fputs("\n", stderr);
         if (acct->ntr == 0)
             continue;
         if (acct->typ != ACCT)
@@ -178,16 +179,15 @@ main(int argc, char *argv[])
             tr_print(acct, acct->tr[j]);
         }
         if (acct->ntr > 0)
-            puts("");
+            fputs("\n", stderr);
         for (j = 0; j < acct->nbuckets; ++j) {
             b = acct->buckets[j];
             fprintf(stderr, "%4d %s dr %ld cr %ld\n", b->key / 100, monthname(b->key % 100 - 1), b->dr, b->cr);
         }
         if (acct->nbuckets > 0)
-            puts("");
+            fputs("\n", stderr);
     }
     */
-    return 0;
     /* TODO: Do the same binning process for vars. Take the
      * intersection of the months available for each account named and
      * set start and end dates for the var. Then iterate over the
@@ -198,13 +198,11 @@ main(int argc, char *argv[])
     } else if (!strcmp(argv[2], "income")) {
         print_income(year, month);
     } else if (!strcmp(argv[2], "plot")) {
-        if (argc != 4) {
+        if (argc < 4) {
             fprintf(stderr, "Usage: %s plot tracker-name\n", argv[0]);
             return EXIT_FAILURE;
         }
-        if (!plot(argv[3], year, month)) {
-            return EXIT_FAILURE;
-        }
+        return plot(&argv[2], argc-2);
     } else {
         fprintf(stderr, "%s: No such command: %s\n", argv[0], argv[2]);
         return EXIT_FAILURE;
@@ -213,45 +211,89 @@ main(int argc, char *argv[])
 }
 
 static int
-plot(char *varname, int year, int month)
+getyear(time_t date)
 {
+    struct tm tm;
+
+    localtime_r(&date, &tm);
+    return tm.tm_year + 1900;
+}
+
+static int
+getmonth(time_t date)
+{
+    struct tm tm;
+    localtime_r(&date, &tm);
+    return tm.tm_mon + 1;
+}
+
+static int
+plot(char *argv[], int argc)
+{
+    account *accts[10];
+    int na;
     FILE *fp;
     account *a;
     char *path;
     int y;
+    int j;
     int m;
     int i;
-    int ok;
+    int found;
+    int nfound;
+    int nplotted = 0;
     double val;
     char tmp[] = "/tmp/keep.XXX";
-    a = account_find(varname);
-    if (a == NULL) {
-        fprintf(stderr, "Can't find trackable object: %s\n", varname);
-        return 0;
+    for (na = 0; na+1 < argc; ++na) {
+        accts[na] = account_find(argv[na+1]);
+        if (accts[na] == NULL) {
+            fprintf(stderr, "Can't find trackable object: %s\n", argv[na+1]);
+            return EXIT_FAILURE;
+        }
     }
-    path = mktemp(tmp);
-    if (path == NULL) {
-        fprintf(stderr, "Can't make data file\n");
-        return 0;
-    }
-    fp = fopen(path, "w");
-    if (fp == NULL) {
-        fprintf(stderr, "Can't open data file: %s\n", path);
-        return 0;
-    }
-    /* fprintf(stderr, "Opened data file: %s\n", path); */
-    /* for (i = 0; i < a->nbuckets; ++i) { */
-    /*     fprintf(fp, "%d\t%f\n", i, a->bucket[i]); */
-    /* } */
-    fclose(fp);
-    fprintf(stdout, "set title \"%s\"\n", a->longname);
+    /* fp = stderr; */
     fprintf(stdout, "set xlabel \"Time\"\n");
-    fprintf(stdout, "set term dumb\n");
     fprintf(stdout, "set grid\n");
-    /* fprintf(stdout, "set xrange [0:%d]\n", a->monthcap); */
-    /* fprintf(stdout, "set output \"%s.png\"\n", varname); */
-    fprintf(stdout, "plot \"%s\" title \"\" with linespoints\n", path);
-    return 1;
+    for (i = 0; i < na; ++i) {
+        a = accts[i];
+        strcpy(tmp, "/tmp/keep.XXX");
+        path = mktemp(tmp);
+        if (path == NULL) {
+            fprintf(stderr, "Can't make data file\n");
+            return EXIT_FAILURE;
+        }
+        fp = fopen(path, "w");
+        if (fp == NULL) {
+            fprintf(stderr, "Can't open data file: %s\n", path);
+            return EXIT_FAILURE;
+        }
+        if (a->maxdate >= a->mindate) {
+            for (y = getyear(a->mindate); y <= getyear(a->maxdate); ++y) {
+                for (m = getmonth(a->mindate); m <= getmonth(a->maxdate); ++m) {
+                    found = 1;
+                    val = a->eval(a, y, m, &found);
+                    if (found) {
+                        fprintf(fp, "%d\t%lf\n", y*100+m, val);
+                    }
+                }
+            }
+        }
+        fclose(fp);
+        if (a->maxdate >= a->mindate) {
+            /* fprintf(stdout, "set title \"%s\"\n", a->longname); */
+            /* fprintf(stdout, "set xlabel \"Time\"\n"); */
+            /* fprintf(stdout, "set term dumb\n"); */
+            /* fprintf(stdout, "set xrange [0:%d]\n", monthdist(a->mindate, a->maxdate) + 1); */
+            /* fprintf(stdout, "set output \"%s.png\"\n", varname); */
+            if (nplotted++ == 0) {
+                fprintf(stdout, "plot \"%s\" title \"%s\" with linespoints", path, a->longname);
+            } else {
+                fprintf(stdout, ", \"%s\" title \"%s\" with linespoints", path, a->longname);
+            }
+        }
+    }
+    fputs("\n", stdout);
+    return EXIT_SUCCESS;
 }
 
 static void
@@ -352,7 +394,7 @@ addtrans(account *a, transaction *tr)
     int newcap;
     int i;
 
-    fprintf(stderr, "Adding transaction to %s\n", a->name);
+    /* fprintf(stderr, "Adding transaction to %s\n", a->name); */
 
     /* Insert transaction into transaction list in ascending time order */
     if (a->ntr == a->trcap) {

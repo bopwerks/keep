@@ -60,8 +60,7 @@ struct account {
     long debits;
     long credits;
 
-    double (*eval)(struct account *a, int year, int month, int *ok);
-    void (*bin)(struct account *a);
+    double (*eval)(struct account *a, int year, int month, int *found);
 };
 typedef struct account account;
 
