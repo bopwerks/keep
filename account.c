@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,12 +7,17 @@
 #include "account.h"
 #include "transaction.h"
 #include "util.h"
+#include "track.h"
+
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+#define max(a, b) (((a) > (b)) ? (a) : (b))
 
 account *accounts[MAXACCT];
 int naccounts = 0;
 
-static void bin_flow(account *a, transaction *t);
-static void bin_balance(account *a, transaction *t);
+static void bin_var(account *a);
+static void bin_income(account *a);
+static void bin_asset(account *a);
 
 account *
 account_new(account_type type, char *name, char *longname)
@@ -19,23 +25,19 @@ account_new(account_type type, char *name, char *longname)
     account *a;
     account *parent;
 
-    /* fprintf(stderr, "Creating new account '%s'\n", name); */
+    fprintf(stderr, "Creating new account '%s'\n", name);
     a = calloc(1, sizeof *a);
     if (a == NULL) {
         return NULL;
     }
     a->typ = ACCT;
     a->type = type;
-    switch (a->type) {
-    case INCOME:
-    case EXPENSE:
-        a->bin = bin_flow;
-        break;
-    case ASSET:
-    case LIABILITY:
-        a->bin = bin_balance;
-        break;
-    }
+    a->mindate = 0;
+    a->maxdate = 0;
+    if (a->type == EXPENSE || a->type == INCOME)
+        a->bin = bin_income;
+    else
+        a->bin = bin_asset;
     a->name = malloc(strlen(name) + 1);
     if (a->name == NULL) {
         free(a);
@@ -57,6 +59,16 @@ account_new(account_type type, char *name, char *longname)
         free(a);
         return NULL;
     }
+    a->nbuckets = 0;
+    a->maxbuckets = 1;
+    a->buckets = malloc(sizeof *(a->buckets) * a->maxbuckets);
+    if (a->buckets == NULL) {
+        free(a->tr);
+        free(a->longname);
+        free(a->name);
+        free(a);
+        return NULL;
+    }
     accounts[naccounts++] = a;
     return a;
 }
@@ -64,7 +76,7 @@ account_new(account_type type, char *name, char *longname)
 int
 account_connect(account *parent, account *child)
 {
-    /* fprintf(stderr, "Connecting from %s to %s\n", child->name, parent->name); */
+    fprintf(stderr, "Connecting %s <- %s\n", parent->name, child->name);
     if (child->parent != NULL) {
         fprintf(stderr, "Account %s already has parent %s\n", child->name, parent->name);
         return 0;
@@ -79,23 +91,23 @@ account_connect(account *parent, account *child)
     return 1;
 }
 
-static long
-account_debits(account *acct, int year, int month)
-{
-    long total;
-    int i;
-    transaction *tr;
+/* static long */
+/* account_debits(account *acct, int year, int month) */
+/* { */
+/*     long total; */
+/*     int i; */
+/*     transaction *tr; */
 
-    for (total = i = 0, tr = acct->tr[i]; i < acct->ntr; tr = acct->tr[++i]) {
-        if (tr->year == year && tr->month == month) {
-            total += tr->debit;
-        }
-    }
-    for (i = 0; i < acct->naccounts; ++i) {
-        total += account_debits(acct->accounts[i], year, month);
-    }
-    return total;
-}
+/*     for (total = i = 0, tr = acct->tr[i]; i < acct->ntr; tr = acct->tr[++i]) { */
+/*         if (tr->year == year && tr->month == month) { */
+/*             total += tr->debit; */
+/*         } */
+/*     } */
+/*     for (i = 0; i < acct->naccounts; ++i) { */
+/*         total += account_debits(acct->accounts[i], year, month); */
+/*     } */
+/*     return total; */
+/* } */
 
 static long
 account_credits(account *acct, int year, int month)
@@ -119,134 +131,29 @@ account_credits(account *acct, int year, int month)
     return total;
 }
 
-static int indent;
-
-static void
-account_flow_rec(account *acct, int year, int month, long *dr, long *cr)
-{
-    int i;
-    transaction *tr;
-
-    /* for (i = 0; i < indent; ++i) */
-    /*     fputc('\t', stderr); */
-    /* fprintf(stderr, "Factoring in transactions from account: %s\n", acct->name); */
-    for (i = 0, tr = acct->tr[i]; i < acct->ntr; tr = acct->tr[++i]) {
-        if ((year == 0 || tr->year == year) && (month == 0 || tr->month == month)) {
-            /* fprintf(stderr, "%s dr %ld cr %ld\n", tr->description, tr->debit, tr->credit); */
-            *dr += tr->debit;
-            *cr += tr->credit;
-        }
-    }
-    /* ++indent; */
-    for (i = 0; i < acct->naccounts; ++i) {
-        account_flow_rec(acct->accounts[i], year, month, dr, cr);
-    }
-    /* --indent; */
-}
-
 long
-account_flow(account *acct, int year, int month, int *ok)
+account_balance(account *acct, time_t date, int *ok)
 {
-    long dr;
-    long cr;
-    long min;
-    long max;
-
-    dr = cr = 0;
-    account_flow_rec(acct, year, month, &dr, &cr);
-    if (dr == 0.0 && cr == 0.0 && ok != NULL) {
-        *ok = 0;
-    }
-    /* dr = account_debits(acct, year, month); */
-    /* cr = account_credits(acct, year, month); */
-    min = (dr > cr) ? cr : dr;
-    max = (dr > cr) ? dr : cr;
-
-    return max - min;
-}
-
-static int
-account_balance_rec(account *acct, int year, int month, long *dr, long *cr)
-{
-    int i;
-    transaction *tr;
-    int ntr;
-
-    ntr = 0;
-    for (i = 0; i < acct->ntr; tr = acct->tr[++i]) {
-        tr = acct->tr[i];
-        if ((year == 0 || tr->year <= year) && (month == 0 || tr->month <= month)) {
-            /* fprintf(stderr, "%s dr %ld cr %ld\n", tr->description, tr->debit, tr->credit); */
-            *dr += tr->debit;
-            *cr += tr->credit;
-            ++ntr;
-        }
-    }
-    for (i = 0; i < acct->naccounts; ++i) {
-        ntr += account_balance_rec(acct->accounts[i], year, month, dr, cr);
-    }
-    return ntr;
-}
-
-long
-account_balance(account *acct, int year, int month, int *ok)
-{
-    long dr;
-    long cr;
-    long min;
-    long max;
-
-    dr = cr = 0;
-    if (account_balance_rec(acct, year, month, &dr, &cr) == 0 && ok != NULL) {
-        *ok = 0;
-    }
-    /* dr = account_debits(acct, year, month); */
-    /* cr = account_credits(acct, year, month); */
-    min = (dr > cr) ? cr : dr;
-    max = (dr > cr) ? dr : cr;
-
-    return max - min;
+    return 0;
 }
 
 void
-account_print(account *acct, int year, int month, int level)
+account_print(account *acct, time_t date, int level)
 {
     int i;
     long bal;
     int dollars;
     int cents;
 
-    switch (acct->type) {
-    case ASSET:
-    case LIABILITY:
-        bal = account_balance(acct, year, month, NULL);
-        /* if (bal > 0) { */
-            dollars = bal / 100;
-            cents = bal % 100;
-            for (i = 0; i < level; ++i) {
-                putchar('\t');
-            }
-            printf("%s %d.%02d\n", acct->longname, dollars, cents);
-            for (i = 0; i < acct->naccounts; ++i) {
-                account_print(acct->accounts[i], year, month, level+1);
-            }
-        /* } */
-        break;
-    case EXPENSE:
-    case INCOME:
-        bal = account_flow(acct, year, month, NULL);
-        /* if (bal > 0) { */
-            dollars = bal / 100;
-            cents = bal % 100;
-            for (i = 0; i < level; ++i) {
-                putchar('\t');
-            }
-            printf("%s %d.%02d\n", acct->longname, dollars, cents);
-            for (i = 0; i < acct->naccounts; ++i) {
-                account_print(acct->accounts[i], year, month, level+1);
-            }
-        /* } */
-        break;
+    bal = account_balance(acct, date, NULL);
+    dollars = bal / 100;
+    cents = bal % 100;
+    for (i = 0; i < level; ++i) {
+        putchar('\t');
+    }
+    printf("%s %d.%02d\n", acct->longname, dollars, cents);
+    for (i = 0; i < acct->naccounts; ++i) {
+        account_print(acct->accounts[i], date, level+1);
     }
 }
 
@@ -264,10 +171,8 @@ account_find(char *name)
     return NULL;
 }
 
-extern double eval(expr *e, int y, int m, int *ok);
-
 double
-account_eval(account *acct, int year, int month, int *ok)
+account_eval(account *acct, time_t date, int *ok)
 {
     double rval;
     long bal;
@@ -275,37 +180,160 @@ account_eval(account *acct, int year, int month, int *ok)
     long cents;
     switch (acct->typ) {
     case ACCT:
-        switch (acct->type) {
-        case ASSET:
-        case LIABILITY:
-            bal = account_balance(acct, year, month, ok);
-            break;
-        case INCOME:
-        case EXPENSE:
-            bal = account_flow(acct, year, month, ok);
-            break;
-        }
+        bal = account_balance(acct, date, ok);
         dollars = bal / 100;
         cents = bal % 100;
         rval = dollars + (cents / 100.0);
         return rval;
     case VAR:
-        return eval(acct->exp, year, month, ok);
+        return eval(acct->exp, date, ok);
     case NUM:
         return acct->dval;
     }
 }
 
 static void
-bin_flow(account *a, transaction *t)
+bin_var(account *a)
 {
-    /* TODO: Compute index into a->months from t->date and compute the
-     * flow for that month */
+    transaction *t;
+    int i;
+    int ok;
+    
+    for (i = 0; i < a->ntr; ++i) {
+        t = a->tr[i];
+        ok = 1;
+    }
 }
 
 static void
-bin_balance(account *a, transaction *t)
+bin_income(account *a)
 {
-    /* TODO: Compute index into a->months from t->date and compute the
-     * resulting balance from the transaction for that month */
+    transaction *t;
+    int i;
+    int pd;
+    int d;
+
+    /* fprintf(stderr, "BIN INCOME %s\n", a->name); */
+    
+    for (i = 0; i < a->ntr; ++i) {
+        t = a->tr[i];
+        d = monthdist(a->mindate, t->date);
+        /* fprintf(stderr, "%s month %d = %f\n", a->name, d-1, a->months[d-1]); */
+    }
+}
+
+static void
+bin_asset(account *a)
+{
+    transaction *t;
+    int i;
+    int d;
+    int pd;
+
+    /* fprintf(stderr, "BIN ASSET %s\n", a->name); */
+    pd = 0;
+    for (i = 0; i < a->ntr; ++i) {
+        t = a->tr[i];
+        d = monthdist(a->mindate, t->date);
+        if (d != pd) {
+        }
+        pd = d;
+        /* fprintf(stderr, "%s month %d = %f\n", a->name, d-1, a->months[d-1]); */
+    }
+}
+
+static int
+cmp(const void *x, const void *y)
+{
+    int key;
+    bucket **b;
+
+    key = *((int *) x);
+    b = (bucket **) y;
+    /* fprintf(stderr, "Search Key = %d Bucket Key = %d\n", key, (*b)->key); */
+
+    return key - (*b)->key;
+}
+
+static bucket *
+find_bucket(account *a, time_t date)
+{
+    struct tm tm;
+    int y;
+    int m;
+    int key;
+    bucket **rval;
+
+    localtime_r(&date, &tm);
+    y = tm.tm_year + 1900;
+    m = tm.tm_mon + 1;
+
+    key = y * 100 + m;
+    rval = bsearch((void *) &key, a->buckets, a->nbuckets, sizeof *(a->buckets), cmp);
+    if (rval == NULL) {
+        /* fprintf(stderr, "Can't find key %d\n", key); */
+        return NULL;
+    } else {
+        /* fprintf(stderr, "Found key %d\n", key); */
+        return *rval;
+    }
+}
+
+static int
+cmpbucket(bucket *a, bucket *b)
+{
+    return a->key - b->key;
+}
+
+static bucket *
+add_bucket(account *a, time_t date)
+{
+    struct tm tm;
+    bucket *b;
+    bucket *tmpb;
+    int i;
+    assert(a != NULL);
+
+    /* fprintf(stderr, "%s nbuckets = %d maxbuckets = %d\n", a->name, a->nbuckets, a->maxbuckets); */
+    if (a->nbuckets == a->maxbuckets) {
+        if (!array_grow((void **) &a->buckets, a->maxbuckets * 2, sizeof *(a->buckets))) {
+            return NULL;
+        }
+        a->maxbuckets *= 2;
+    }
+    b = calloc(1, sizeof *b);
+    if (b == NULL) {
+        return NULL;
+    }
+    localtime_r(&date, &tm);
+    b->key = (tm.tm_year + 1900) * 100 + (tm.tm_mon + 1);
+    a->buckets[a->nbuckets] = b;
+    for (i = a->nbuckets; i > 0 && cmpbucket(a->buckets[i-1], a->buckets[i]) > 0; --i) {
+        tmpb = a->buckets[i-1];
+        a->buckets[i-1] = a->buckets[i];
+        a->buckets[i] = tmpb;
+    }
+    a->nbuckets += 1;
+    /* fprintf(stderr, "Added bucket %d\n", b->key); */
+    return b;
+}
+
+void
+account_bin(account *a, time_t date, long dr, long cr)
+{
+    bucket *b;
+    int i;
+
+    assert(a != NULL);
+    b = find_bucket(a, date);
+    if (b == NULL) {
+        b = add_bucket(a, date);
+        if (b == NULL) {
+            /* TODO: error */
+            return;
+        }
+    }
+    /* fprintf(stderr, "Updated bucket %d for account %s\n", b->key, a->name); */
+    b->dr += dr;
+    b->cr += cr;
 }

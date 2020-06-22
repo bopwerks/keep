@@ -21,7 +21,16 @@ struct expr {
 };
 typedef struct expr expr;
 
-double eval(expr *e, int year, int month, int *ok);
+struct range {
+    time_t start;
+    time_t end;
+};
+typedef struct range range;
+
+double eval(expr *e, time_t date, int *ok);
 expr *expr_new(expr_type type, account *aval, long ival, expr *left, expr *right);
 account *tracker_new(char *name, char *longname, expr *e);
 void expr_print(FILE *fp, expr *e);
+
+/* Compute the intersection of all the date ranges of all subexpressions */
+range expr_range(expr *e);

@@ -20,19 +20,14 @@ enum account_type {
 };
 typedef enum account_type account_type;
 
-struct period {
-    enum { MONTH, YEAR } type;
-    int n;
-    long debits;
-    long credits;
-    struct period *left; /* subperiod */
-    struct period *right; /* next period */
-};
-typedef struct period period;
-
-period* period_new(int yearmo);
-
 typedef struct expr expr;
+
+struct bucket {
+    int key;
+    long dr;
+    long cr;
+};
+typedef struct bucket bucket;
 
 struct account {
     var_type typ;
@@ -58,13 +53,15 @@ struct account {
     time_t mindate;
     time_t maxdate;
 
-    double *months; /* Flow or balance of account at the end of each month */
-    int nmonths;
-    double *days; /* Flow or balance of account at the end of each day */
-    int ndays;
+    bucket **buckets;
+    int nbuckets;
+    int maxbuckets;
+
+    long debits;
+    long credits;
 
     double (*eval)(struct account *a, int year, int month, int *ok);
-    void (*bin)(struct account *a, struct transaction *t);
+    void (*bin)(struct account *a);
 };
 typedef struct account account;
 
@@ -73,7 +70,8 @@ extern int naccounts;
 
 account* account_find(char *name);
 account* account_new(account_type type, char *name, char *longname);
-long     account_balance(account *acct, int year, int month, int *ok);
+long     account_balance(account *acct, time_t date, int *ok);
 int      account_connect(account *parent, account *child);
-void     account_print(account *acct, int year, int month, int level);
-double   account_eval(account *acct, int year, int month, int *ok);
+void     account_print(account *acct, time_t date, int level);
+double   account_eval(account *acct, time_t date, int *ok);
+void     account_bin(account *a, time_t date, long dr, long cr);

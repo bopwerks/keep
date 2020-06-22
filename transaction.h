@@ -13,5 +13,5 @@ typedef struct transaction transaction;
 
 typedef struct account account;
 
-transaction *newtrans(struct tm *date, char *description, long debit, long credit);
+transaction *newtrans(time_t date, char *description, long debit, long credit);
 void addtrans(account *acct, transaction *tr);

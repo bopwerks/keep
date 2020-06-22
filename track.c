@@ -1,3 +1,4 @@
+#include <limits.h>
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -6,37 +7,40 @@
 #include "account.h"
 #include "track.h"
 
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+#define max(a, b) (((a) > (b)) ? (a) : (b))
+
 double
-eval(expr *e, int y, int m, int *ok)
+eval(expr *e, time_t date, int *ok)
 {
     double left;
     double right;
     /* expr_print(stderr, e); */
     switch (e->type) {
     case EXPR_ADD:
-        left = eval(e->left, y, m, ok);
-        right = eval(e->right, y, m, ok);
+        left = eval(e->left, date, ok);
+        right = eval(e->right, date, ok);
         return left + right;
     case EXPR_SUB:
-        left = eval(e->left, y, m, ok);
-        right = eval(e->right, y, m, ok);
+        left = eval(e->left, date, ok);
+        right = eval(e->right, date, ok);
         return left - right;
     case EXPR_MUL:
-        left = eval(e->left, y, m, ok);
-        right = eval(e->right, y, m, ok);
+        left = eval(e->left, date, ok);
+        right = eval(e->right, date, ok);
         return left * right;
     case EXPR_DIV:
-        left = eval(e->left, y, m, ok);
-        right = eval(e->right, y, m, ok);
+        left = eval(e->left, date, ok);
+        right = eval(e->right, date, ok);
         return left / right;
     case EXPR_EXP:
-        left = eval(e->left, y, m, ok);
-        right = eval(e->right, y, m, ok);
+        left = eval(e->left, date, ok);
+        right = eval(e->right, date, ok);
         return pow(left, right);
     case EXPR_NUM:
         return e->ival;
     case EXPR_ID:
-        left = account_eval(e->aval, y, m, ok);
+        left = account_eval(e->aval, date, ok);
         return left;
     }
 }
@@ -84,6 +88,89 @@ expr_new(expr_type type, account *aval, long ival, expr *left, expr *right)
     return e;
 }
 
+time_t
+expr_min(expr *e)
+{
+    time_t a, b;
+    switch (e->type) {
+    case EXPR_ADD:
+    case EXPR_SUB:
+    case EXPR_MUL:
+    case EXPR_DIV:
+    case EXPR_EXP:
+        a = expr_min(e->left);
+        b = expr_min(e->right);
+        return min(a, b);
+    case EXPR_NUM:
+        /* Constants have infinite range */
+        return LONG_MAX;
+    case EXPR_ID:
+        return e->aval->mindate;
+    }
+}
+
+static range
+intersect(range *a, range *b)
+{
+    range r;
+
+    if (a->end - a->start <= 0) {
+        r.start = r.end = 0;
+    } else {
+        r.start = max(a->start, b->start);
+        r.end = min(a->end, b->end);
+    }
+    return r;
+}
+
+static void
+print_range(range *r)
+{
+    char buf1[256];
+    char buf2[256];
+    struct tm tm;
+
+    ctime_r(&r->start, buf1);
+    ctime_r(&r->end, buf2);
+
+    printf("[%s, %s]", buf1, buf2);
+}
+
+range
+expr_range(expr *e)
+{
+    range a, b;
+    range r;
+    /* TODO: Choose representation for empty and nonempty ranges */
+    /* An empty range r is one where r.end - r.start <= 0 */
+    switch (e->type) {
+    case EXPR_ADD:
+    case EXPR_SUB:
+    case EXPR_MUL:
+    case EXPR_DIV:
+    case EXPR_EXP:
+        /* TODO: Return intersection of left and right ranges */
+        /* printf("Evaluating "); expr_print(stdout, e); */
+        a = expr_range(e->left);
+        /* printf("Left side "); print_range(&a); */
+        b = expr_range(e->right);
+        /* printf("Right side "); print_range(&b); */
+        r = intersect(&a, &b);
+        break;
+    case EXPR_NUM:
+        /* TODO: Return infinite range */
+        r.start = LONG_MIN;
+        r.end = LONG_MAX;
+        break;
+    case EXPR_ID:
+        /* TODO: Return range of account or var */
+        r.start = e->aval->mindate;
+        r.end = e->aval->maxdate;
+        break;
+    }
+    return r;
+}
+
 account *
 tracker_new(char *name, char *longname, expr *e)
 {
@@ -93,25 +180,12 @@ tracker_new(char *name, char *longname, expr *e)
     assert(longname && "long name is null");
     assert(e && "expr is null");
 
-    a = calloc(1, sizeof *a);
+    /* fprintf(stderr, "Making new tracker %s\n", name); */
+    a = account_new(EXPENSE, name, longname);
     if (a == NULL) {
         return NULL;
     }
     a->typ = VAR;
-    a->name = malloc(strlen(name)+1);
-    if (a->name == NULL) {
-        free(a);
-        return NULL;
-    }
-    strcpy(a->name, name);
-    a->longname = malloc(strlen(longname)+1);
-    if (a->longname == NULL) {
-        free(a->name);
-        free(a);
-        return NULL;
-    }
-    strcpy(a->longname, longname);
     a->exp = e;
-    accounts[naccounts++] = a;
     return a;
 }

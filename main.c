@@ -29,7 +29,7 @@ static void print_income(int year, int month);
 /* Connect built-in accounts (income, expenses, liabilities, assets)
  * to the root accounts of their type.
  */
-static void
+void
 connect(void)
 {
     static char *name[] = {
@@ -46,7 +46,7 @@ connect(void)
 
     for (i = 0, a = accounts[i]; i < naccounts; a = accounts[++i]) {
         b = account_find(name[a->type]);
-        if (b == a || a->nparents != 0) {
+        if (b == a || a->parent != NULL) {
             continue;
         }
         assert(b != NULL);
@@ -59,22 +59,36 @@ connect(void)
 
 static int plot(char *varname, int year, int month);
 
-/* static void */
-/* yearmonth(time_t date, int *year, int *month) */
-/* { */
-/*     struct tm *t; */
-/*     assert(t != NULL); */
-/*     assert(year != NULL); */
-/*     assert(month != NULL); */
+static void
+tr_print(account *a, transaction *t)
+{
+    struct tm tm;
+    long amount;
+    long dollars;
+    long cents;
+    assert(t != NULL);
 
-/*     t = localtime(&date); */
-/*     *year = t->tm_year + 1900; */
-/*     *month = t->tm_mon + 1; */
-/* } */
+    localtime_r(&t->date, &tm);
+    amount = (t->debit == 0.0) ? t->credit : t->debit;
+    dollars = amount / 100;
+    cents = amount % 100;
+    fprintf(stderr, "%10lx %d %s %2d %-16s %s %5ld.%02ld \"%s\"\n",
+            t->date,
+            tm.tm_year + 1900,
+            monthname(tm.tm_mon),
+            tm.tm_mday,
+            a->name,
+            t->debit == 0.0 ? "cr" : "dr",
+            dollars,
+            cents,
+            t->description);
+}
 
 int
 main(int argc, char *argv[])
 {
+    char buf1[256];
+    char buf2[256];
     transaction *tr;
     account *acct;
     int i;
@@ -90,6 +104,9 @@ main(int argc, char *argv[])
     int minmonth;
     int maxmonth;
     int nmonths;
+    time_t validtime;
+    bucket *b;
+    range r;
 
     time(&clock);
     tm = localtime(&clock);
@@ -126,31 +143,6 @@ main(int argc, char *argv[])
     if (error) {
         return EXIT_FAILURE;
     }
-    connect();
-    for (i = 0; i < naccounts; ++i) {
-        acct = accounts[i];
-        if (acct->typ != ACCT)
-            continue;
-        /* Adjust starting balances to have the same date as the first
-         * real transaction, if there is one.
-         */
-        if (acct->ntr > 1 && acct->tr[0]->year == 1900) {
-            acct->tr[0]->date = acct->tr[1]->date;
-            acct->mindate = acct->tr[0]->date;
-        }
-        /* Compute total available months, allocate space for bins, and compute each bin */
-        acct->nmonths = monthdist(acct->mindate, acct->maxdate) + 1;
-        /* fprintf(stderr, "%d months of data for account %s\n", acct->nmonths, acct->longname); */
-        acct->months = malloc((sizeof *(acct->months)) * acct->nmonths);
-        for (j = 0; j < acct->ntr; ++j) {
-            acct->bin(acct, acct->tr[j]);
-        }
-    }
-    /* TODO: Do the same binning process for vars. Take the
-     * intersection of the months available for each account named and
-     * set start and end dates for the var. Then iterate over the
-     * months in the range, evaluating the var with the year/month to
-     * produce the bin value for that month. */
     for (i = 0; i < naccounts; ++i) {
         acct = accounts[i];
         if (acct->typ != VAR)
@@ -163,7 +155,44 @@ main(int argc, char *argv[])
          * of all vars/accounts named, and the end date will be the
          * minimum of the end dates of all vars/accounts named.
          */
+        r = expr_range(acct->exp);
+        acct->mindate = r.start;
+        acct->maxdate = r.end;
     }
+    /*
+    for (i = 0; i < naccounts; ++i) {
+        struct tm tm;
+        acct = accounts[i];
+        puts(acct->name);
+        localtime_r(&acct->mindate, &tm);
+        strftime(buf1, sizeof buf1, "%Y %b %d", &tm);
+        localtime_r(&acct->maxdate, &tm);
+        strftime(buf2, sizeof buf2, "%Y %b %d", &tm);
+        printf("range %s (%ld) to %s (%ld)\n", buf1, acct->mindate, buf2, acct->maxdate);
+        puts("");
+        if (acct->ntr == 0)
+            continue;
+        if (acct->typ != ACCT)
+            continue;
+        for (j = 0; j < acct->ntr; ++j) {
+            tr_print(acct, acct->tr[j]);
+        }
+        if (acct->ntr > 0)
+            puts("");
+        for (j = 0; j < acct->nbuckets; ++j) {
+            b = acct->buckets[j];
+            fprintf(stderr, "%4d %s dr %ld cr %ld\n", b->key / 100, monthname(b->key % 100 - 1), b->dr, b->cr);
+        }
+        if (acct->nbuckets > 0)
+            puts("");
+    }
+    */
+    return 0;
+    /* TODO: Do the same binning process for vars. Take the
+     * intersection of the months available for each account named and
+     * set start and end dates for the var. Then iterate over the
+     * months in the range, evaluating the var with the year/month to
+     * produce the bin value for that month. */
     if (!strcmp(argv[2], "balance")) {
         print_balance(year, month);
     } else if (!strcmp(argv[2], "income")) {
@@ -211,15 +240,15 @@ plot(char *varname, int year, int month)
         return 0;
     }
     /* fprintf(stderr, "Opened data file: %s\n", path); */
-    for (i = 0; i < a->nmonths; ++i) {
-        fprintf(fp, "%d\t%f\n", i, a->months[i]);
-    }
+    /* for (i = 0; i < a->nbuckets; ++i) { */
+    /*     fprintf(fp, "%d\t%f\n", i, a->bucket[i]); */
+    /* } */
     fclose(fp);
     fprintf(stdout, "set title \"%s\"\n", a->longname);
     fprintf(stdout, "set xlabel \"Time\"\n");
     fprintf(stdout, "set term dumb\n");
     fprintf(stdout, "set grid\n");
-    fprintf(stdout, "set xrange [0:%d]\n", a->nmonths);
+    /* fprintf(stdout, "set xrange [0:%d]\n", a->monthcap); */
     /* fprintf(stdout, "set output \"%s.png\"\n", varname); */
     fprintf(stdout, "plot \"%s\" title \"\" with linespoints\n", path);
     return 1;
@@ -237,7 +266,7 @@ print_balance(int year, int month)
     for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) {
         if (acct->type != ASSET || acct->nparents != 0)
             continue;
-        account_print(acct, year, month, 0);
+        /* account_print(acct, 0); */
     }
     puts("");
     puts("## Liabilities");
@@ -245,7 +274,7 @@ print_balance(int year, int month)
     for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) {
         if (acct->type != LIABILITY || acct->nparents != 0)
             continue;
-        account_print(acct, year, month, 0);
+        /* account_print(acct, year, month, 0); */
     }
     /* TODO: Display net worth */
 }
@@ -263,7 +292,7 @@ print_income(int year, int month)
     for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) {
         if (acct->type != INCOME || acct->nparents != 0)
             continue;
-        account_print(acct, year, month, 0);
+        /* account_print(acct, year, month, 0); */
     }
     puts("");
     puts("## Expenses");
@@ -271,7 +300,7 @@ print_income(int year, int month)
     for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) {
         if (acct->type != EXPENSE || acct->nparents != 0)
             continue;
-        account_print(acct, year, month, 0);
+        /* account_print(acct, year, month, 0); */
     }
     /* TODO: Display cashflow */
 }
@@ -285,25 +314,19 @@ yyerror(const char *s)
 }
 
 transaction *
-newtrans(struct tm *date, char *description, long debit, long credit)
+newtrans(time_t date, char *description, long debit, long credit)
 {
     transaction *tr;
 
-    assert(date != NULL);
-    tr = malloc(sizeof *tr);
+    tr = calloc(1, sizeof *tr + strlen((description != NULL) ? description : "") + 1);
     if (tr == NULL) {
         return NULL;
     }
-    tr->date = mktime(date);
-    tr->year = date->tm_year + 1900;
-    tr->month = date->tm_mon + 1;
-    tr->day = date->tm_mday;
-    tr->description = malloc(strlen(description) + 1);
-    if (tr->description == NULL) {
-        free(tr);
-        return NULL;
+    tr->date = date;
+    tr->description = ((char *) tr) + (sizeof *tr);
+    if (description != NULL) {
+        strcpy(tr->description, description);
     }
-    strcpy(tr->description, description);
     tr->debit = debit;
     tr->credit = credit;
     tr->totaldebits = 0;
@@ -318,67 +341,50 @@ cmptr(transaction *a, transaction *b)
 }
 
 void
-addtrans(account *acct, transaction *tr)
+addtrans(account *a, transaction *tr)
 {
+    char buf1[256];
+    char buf2[256];
     transaction **tmp;
     transaction **t;
     transaction *tmptr;
+    bucket *b;
     int newcap;
     int i;
 
-    /* fprintf(stderr, "Adding transaction '%s' to account %s\n", tr->description, acct->name); */
-    if (acct->ntr == acct->trcap) {
-        if (!array_grow((void **) &acct->tr, acct->trcap * 2, sizeof *acct->tr)) {
+    fprintf(stderr, "Adding transaction to %s\n", a->name);
+
+    /* Insert transaction into transaction list in ascending time order */
+    if (a->ntr == a->trcap) {
+        if (!array_grow((void **) &a->tr, a->trcap * 2, sizeof *a->tr)) {
             return;
         }
-        /* newcap = acct->trcap * 2; */
-        /* tmp = realloc(acct->tr, (sizeof *tmp) * newcap); */
-        /* if (tmp == NULL) { */
-        /*     return; */
-        /* } */
-        /* acct->tr = tmp; */
-        acct->trcap *= 2;
+        a->trcap *= 2;
     }
-    t = acct->tr;
-    t[acct->ntr] = tr;
-    for (i = acct->ntr; i > 0 && cmptr(t[i-1], t[i]) > 0; --i) {
+    t = a->tr;
+    t[a->ntr] = tr;
+    for (i = a->ntr; i > 0 && cmptr(t[i-1], t[i]) > 0; --i) {
         tmptr = t[i-1];
         t[i-1] = t[i];
         t[i] = tmptr;
     }
-    acct->ntr += 1;
-    /* fprintf(stderr, "Transaction in Account %s\n", acct->name); */
-    /* for (i = 0; i < acct->ntr; ++i) { */
-    /*     fprintf(stderr, "%02d-%02d-%02d %s dr %ld cr %ld\n", */
-    /*             t[i]->year, t[i]->month, t[i]->day, t[i]->description, t[i]->debit, t[i]->credit); */
-    /* } */
-    /* fputc('\n', stderr); */
-    acct->mindate = (acct->mindate == 0 || tr->date < acct->mindate) ? tr->date : acct->mindate;
-    acct->maxdate = (acct->maxdate == 0 || tr->date > acct->maxdate) ? tr->date : acct->maxdate;
-    if (acct->parent != NULL) {
-        /* fprintf(stderr, "Parent of %s is %s\n", acct->name, acct->parent->name); */
-        addtrans(acct->parent, tr);
-    }
-}
+    a->ntr += 1;
 
-long
-cents(char *num)
-{
-    long val;
-    int cents;
-    int i;
-    int len;
+    /* Update date range */
+    if (tr->date != 0) {
+        if (a->mindate == 0)
+            a->mindate = tr->date;
+        else
+            a->mindate = (tr->date < a->mindate) ? tr->date : a->mindate;
+        if (a->maxdate == 0)
+            a->maxdate = tr->date;
+        else
+            a->maxdate = (tr->date > a->maxdate) ? tr->date : a->maxdate;
+        account_bin(a, tr->date, tr->debit, tr->credit);
+    }
 
-    len = strlen(num);
-    val = 0;
-    for (i = 0; i < len && num[i] != '.'; ++i) {
-        val = val * 10 + (num[i] - '0');
+    /* Update parents */
+    if (a->parent != NULL) {
+        addtrans(a->parent, tr);
     }
-    val *= 100;
-    cents = 0;
-    for (++i; i < len; ++i) {
-        cents = cents * 10 + (num[i] - '0');
-    }
-    val += cents;
-    return val;
 }
