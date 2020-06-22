@@ -1,47 +1,59 @@
 # keep
 
-`keep` is a language for tracking finances using the double-entry bookkeeping method. The user defines accounts with the `account` keyword, creates hierarchies of accounts with the `<-` operator, and lists the transactions as seen in an accounting journal.
-
-The software currently only parses the input journal, displays the balance of each account in a tree format, and terminates. In the future, users will be able to define mathematical expressions as functions of the balances of the different accounts which can be `track`ed over different periods of time, and the software will automatically produce reports from the information tracked.
+`keep` is a language for tracking finances using the double-entry bookkeeping method. The user defines accounts with the `asset`, `liability`, `income`, and `expense` keywords; creates hierarchies of accounts with the `<-` operator; displaying balance sheets and income statements; automatically computes values or ratios of interest using the `track` keyword; and produces plots of these accounts or values using the `plot` subcommand.
 
 ## Example
 
+Input to `keep` is plain ASCII text, like source code. Account and "tracker" definitions come before the percent sign, and transactions come after. In this example we store input in a file called `journal`.
 ```
 $ cat journal
-account income "Income"
-income <- account job "Net Income"
+asset checking "Checking" dr 100.00;
+expense food "Food";
+income salary "Paycheck";
 
-account assets "Assets"
-assets <- account checking "Bank Checking" dr 500.00
-assets <- account savings "Bank Savings" dr 10000.00
-assets <- account cash "Cash"
-assets <- account accts-recv "Accounts Receivable"
+track savings "Monthly Savings" income - expenses;
+track savings_rate "Monthly Savings Rate" savings/income;
 
-account expenses "Expenses"
-expenses <- account auto "Auto"
-expenses <- account food "Food"
-expenses <- account rent "Rent"
+%
 
+2020 jan 1 "Buy groceries"
+	food 		dr 100.00
+    checking	cr 100.00;
+2020 jan 1 "Paycheck"
+	salary	 	cr 1000.00
+    checking	dr 1000.00;
+2020 feb 1 "Buy groceries"
+	food 		dr 200.00
+    checking	cr 200.00;
+2020 feb 1 "Paycheck"
+	salary	 	cr 500.00
+    checking	dr 500.00;
+2020 mar 1 "Buy groceries"
+	food 		dr 300.00
+    checking	cr 300.00;
+2020 mar 1 "Paycheck"
+	salary	 	cr 900.00
+    checking	dr 900.00;
+2020 apr 1 "Buy groceries"
+	food 		dr 400.00
+    checking	cr 400.00;
+2020 apr 1 "Paycheck"
+	salary	 	cr 400.00
+    checking	dr 400.00;
+2020 may 1 "Buy groceries"
+	food 		dr 500.00
+    checking	cr 500.00;
 2020 may 1 "Paycheck"
-    checking dr 2000.00
-    job      cr 2000.00;
-2020 may 1 "Rent Payment"
-    rent      dr 1000.00
-    checking  cr 1000.00;
-2020 may 2 "Groceries"
-    food  dr 50.00
-    cash  cr 50.00;
-$ ./keep <journal
-Income 2000.00
-	Net Income 2000.00
-Assets 11450.00
-	Bank Checking 1500.00
-	Bank Savings 10000.00
-	Cash 50.00
-	Accounts Receivable 0.00
-Expenses 1050.00
-	Auto 0.00
-	Food 50.00
-	Rent 1000.00
-$ 
+	salary	 	cr 800.00
+    checking	dr 800.00;
 ```
+
+The `track` keyword tells `keep` to compute the given expression whenever data is available, and to give the resulting sequence of values a name. This tracker variable can be used in other `track` expressions.
+
+Accounts and tracker variables can be plotted. The `plot` subcommand takes the names of accounts or trackers and produces input to `gnuplot` on standard out. This output may be piped to `gnuplot` to produce a graphical plot.
+
+```
+$ ./keep journal plot income expenses savings | gnuplot -p
+```
+
+![The result of 'plot income expenses savings'](https://raw.githubusercontent.com/bopwerks/keep/master/example.png)
