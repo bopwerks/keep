@@ -15,10 +15,6 @@
 account *accounts[MAXACCT];
 int naccounts = 0;
 
-static void bin_var(account *a);
-static void bin_income(account *a);
-static void bin_asset(account *a);
-
 static bucket ** find_bucket(account *a, time_t date);
 static double eval_expense_income(account *a, int y, int m, int *found);
 
@@ -26,7 +22,6 @@ account *
 account_new(account_type type, char *name, char *longname)
 {
     account *a;
-    account *parent;
 
     /* fprintf(stderr, "Creating new account '%s'\n", name); */
     a = calloc(1, sizeof *a);
@@ -96,46 +91,6 @@ account_connect(account *parent, account *child)
     /* } */
     parent->accounts[parent->naccounts++] = child;
     return 1;
-}
-
-/* static long */
-/* account_debits(account *acct, int year, int month) */
-/* { */
-/*     long total; */
-/*     int i; */
-/*     transaction *tr; */
-
-/*     for (total = i = 0, tr = acct->tr[i]; i < acct->ntr; tr = acct->tr[++i]) { */
-/*         if (tr->year == year && tr->month == month) { */
-/*             total += tr->debit; */
-/*         } */
-/*     } */
-/*     for (i = 0; i < acct->naccounts; ++i) { */
-/*         total += account_debits(acct->accounts[i], year, month); */
-/*     } */
-/*     return total; */
-/* } */
-
-static long
-account_credits(account *acct, int year, int month)
-{
-    /* period *yp; */
-    /* period *mp; */
-    long total;
-    int i;
-
-    total = (acct->ntr > 0) ? acct->tr[acct->ntr-1]->totalcredits : 0;
-    /* for (yp = acct->year; yp != NULL; yp = yp->right) { */
-    /*     for (mp = yp->left; mp != NULL; mp = mp->right) { */
-    /*         if ((year == 0 || yp->n == year) && (month == 0 || mp->n == month)) { */
-    /*             total += mp->debits; */
-    /*         } */
-    /*     } */
-    /* } */
-    for (i = 0; i < acct->naccounts; ++i) {
-        total += account_credits(acct->accounts[i], year, month);
-    }
-    return total;
 }
 
 static int
@@ -247,56 +202,6 @@ account_find(char *name)
 /*     } */
 /* } */
 
-static void
-bin_var(account *a)
-{
-    transaction *t;
-    int i;
-    int ok;
-    
-    for (i = 0; i < a->ntr; ++i) {
-        t = a->tr[i];
-        ok = 1;
-    }
-}
-
-static void
-bin_income(account *a)
-{
-    transaction *t;
-    int i;
-    int pd;
-    int d;
-
-    /* fprintf(stderr, "BIN INCOME %s\n", a->name); */
-    
-    for (i = 0; i < a->ntr; ++i) {
-        t = a->tr[i];
-        d = monthdist(a->mindate, t->date);
-        /* fprintf(stderr, "%s month %d = %f\n", a->name, d-1, a->months[d-1]); */
-    }
-}
-
-static void
-bin_asset(account *a)
-{
-    transaction *t;
-    int i;
-    int d;
-    int pd;
-
-    /* fprintf(stderr, "BIN ASSET %s\n", a->name); */
-    pd = 0;
-    for (i = 0; i < a->ntr; ++i) {
-        t = a->tr[i];
-        d = monthdist(a->mindate, t->date);
-        if (d != pd) {
-        }
-        pd = d;
-        /* fprintf(stderr, "%s month %d = %f\n", a->name, d-1, a->months[d-1]); */
-    }
-}
-
 static int
 cmp(const void *x, const void *y)
 {
@@ -398,7 +303,6 @@ account_bin(account *a, time_t date, long dr, long cr)
 {
     bucket **b;
     bucket *c;
-    int i;
 
     assert(a != NULL);
     b = find_bucket(a, date);
@@ -440,7 +344,6 @@ static double
 eval_expense_income(account *a, int y, int m, int *found)
 {
     bucket **b;
-    long bal;
     
     b = find_bucket_by_key(a, y, m);
     if (found != NULL) {

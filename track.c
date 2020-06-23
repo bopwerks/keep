@@ -122,19 +122,6 @@ intersect(range *a, range *b)
     return r;
 }
 
-static void
-print_range(range *r)
-{
-    char buf1[256];
-    char buf2[256];
-    struct tm tm;
-
-    ctime_r(&r->start, buf1);
-    ctime_r(&r->end, buf2);
-
-    fprintf(stderr, "[%s, %s]", buf1, buf2);
-}
-
 range
 expr_range(expr *e)
 {

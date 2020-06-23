@@ -1,6 +1,6 @@
 SHELL = /bin/sh
 YFLAGS = -d
-CFLAGS = -g
+CFLAGS = -g -Wall
 
 OBJ = \
 	account.o \

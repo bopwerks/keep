@@ -13,8 +13,6 @@
 extern int naccounts;
 extern int nlines;
 
-static struct account *curacct = NULL;
-
 static int error;
 
 extern void yyparse(void);
@@ -59,6 +57,7 @@ connect(void)
 
 static int plot(char *argv[], int argc);
 
+/*
 static void
 tr_print(account *a, transaction *t)
 {
@@ -83,29 +82,17 @@ tr_print(account *a, transaction *t)
             cents,
             t->description);
 }
+*/
 
 int
 main(int argc, char *argv[])
 {
-    char buf1[256];
-    char buf2[256];
-    transaction *tr;
     account *acct;
     int i;
-    int j;
     int year;
     int month;
     time_t clock;
     struct tm *tm;
-    double dval;
-    int ok;
-    int minyear;
-    int maxyear;
-    int minmonth;
-    int maxmonth;
-    int nmonths;
-    time_t validtime;
-    bucket *b;
     range r;
 
     time(&clock);
@@ -236,11 +223,9 @@ plot(char *argv[], int argc)
     account *a;
     char *path;
     int y;
-    int j;
     int m;
     int i;
     int found;
-    int nfound;
     int nplotted = 0;
     double val;
     char tmp[] = "/tmp/keep.XXX";
@@ -312,8 +297,6 @@ print_balance(time_t date)
 {
     account *assets;
     account *liabilities;
-    int i;
-    account *acct;
     long bal;
     
     puts("# Balance Sheet");
@@ -406,13 +389,8 @@ cmptr(transaction *a, transaction *b)
 void
 addtrans(account *a, transaction *tr)
 {
-    char buf1[256];
-    char buf2[256];
-    transaction **tmp;
     transaction **t;
     transaction *tmptr;
-    bucket *b;
-    int newcap;
     int i;
 
     /* fprintf(stderr, "Adding transaction to %s\n", a->name); */

@@ -8,8 +8,6 @@
 FILE *yyin;
 static struct tm tm;
 int nlines = 1;
-static int cents;
-static int i;
 
 char name[64];
 char str[512];
@@ -17,6 +15,8 @@ char num[16];
 
 %}
 %option noyywrap
+%option noinput
+%option nounput
 
 %%
 
