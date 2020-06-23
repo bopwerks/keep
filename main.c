@@ -115,10 +115,10 @@ main(int argc, char *argv[])
         fprintf(stderr, "%s: %s\n", argv[0], strerror(errno));
         return EXIT_FAILURE;
     }
-    account_new(ASSET, "assets", "Total Assets");
-    account_new(LIABILITY, "liabilities", "Total Liabilities");
-    account_new(EXPENSE, "expenses", "Total Expenses");
-    account_new(INCOME, "income", "Total Income");
+    account_new(ASSET, "assets", "Assets");
+    account_new(LIABILITY, "liabilities", "Liabilities");
+    account_new(EXPENSE, "expenses", "Expenses");
+    account_new(INCOME, "income", "Income");
     
     acct = account_new(EXPENSE, "e", "Euler's number");
     acct->typ = NUM;
@@ -214,22 +214,85 @@ getmonth(time_t date)
     return tm.tm_mon + 1;
 }
 
+struct date {
+    int y;
+    int m;
+};
+typedef struct date date;
+
+static int
+date_cmp(date *a, date *b)
+{
+    assert(a != NULL);
+    assert(b != NULL);
+
+    if (a->y != b->y)
+        return a->y - b->y;
+    return a->m - b->m;
+}
+
+static void
+date_init(date *d, int y, int m)
+{
+    assert(d != NULL);
+    assert(m >= 0 && m <= 11);
+    d->y = y;
+    d->m = m;
+}
+
+static void
+date_dec(date *d)
+{
+    assert(d != NULL);
+    if (d->m == 0) {
+        d->y -= 1;
+        d->m = 11;
+    } else {
+        d->m -= 1;
+    }
+}
+
+#define abs(x) ((x < 0) ? -x : x)
+
+static void
+date_inc(date *d)
+{
+    assert(d != NULL);
+    if (d->m == 11) {
+        d->y += 1;
+        d->m = 0;
+    } else {
+        d->m += 1;
+    }
+}
+
+static void
+date_add(date *d, int delta)
+{
+    int i;
+    for (i = 0; i < abs(delta); ++i)
+        ((delta < 0) ? date_dec : date_inc)(d);
+}
+
 static int
 plot(char *argv[], int argc)
 {
+    enum { NMONTHS = 4 };
     account *accts[10];
     int na;
     FILE *fp;
     account *a;
     char *path;
-    int y;
-    int m;
     int i;
     int found;
     int nplotted = 0;
     double val;
     char tmp[] = "/tmp/keep.XXX";
-    for (na = 0; na+1 < argc; ++na) {
+    date start;
+    date end;
+    time_t t;
+    
+    for (na = 0; na < argc-1; ++na) {
         accts[na] = account_find(argv[na+1]);
         if (accts[na] == NULL) {
             fprintf(stderr, "Can't find trackable object: %s\n", argv[na+1]);
@@ -237,9 +300,22 @@ plot(char *argv[], int argc)
         }
     }
     /* fp = stderr; */
+    t = time(NULL);
     fprintf(stdout, "set xlabel \"Time\"\n");
     fprintf(stdout, "set grid\n");
+    fprintf(stdout, "set xdata time\n");
+    fprintf(stdout, "set timefmt \"%%Y-%%m\"\n");
+    date_init(&start, getyear(t), getmonth(t)-1);
+    end = start;
+    date_add(&start, -NMONTHS);
+    fprintf(stdout, "set xrange [\"%d-%d\":\"%d-%d\"]\n", start.y, start.m+1, end.y, end.m+1);
+    fprintf(stdout, "set format x \"%%Y/%%m\"\n");
+    /* fprintf(stdout, "set term dumb\n"); */
+    /* fprintf(stdout, "set output \"%s.png\"\n", varname); */
     for (i = 0; i < na; ++i) {
+        date_init(&start, getyear(t), getmonth(t)-1);
+        end = start;
+        date_add(&start, -NMONTHS);
         a = accts[i];
         strcpy(tmp, "/tmp/keep.XXX");
         path = mktemp(tmp);
@@ -252,29 +328,23 @@ plot(char *argv[], int argc)
             fprintf(stderr, "Can't open data file: %s\n", path);
             return EXIT_FAILURE;
         }
-        if (a->maxdate >= a->mindate) {
-            for (y = getyear(a->mindate); y <= getyear(a->maxdate); ++y) {
-                for (m = getmonth(a->mindate); m <= getmonth(a->maxdate); ++m) {
-                    found = 1;
-                    val = a->eval(a, y, m, &found);
-                    if (found) {
-                        fprintf(fp, "%d\t%lf\n", y*100+m, val);
-                    }
-                }
-            }
+        while (date_cmp(&start, &end) <= 0) {
+            val = a->eval(a, start.y, start.m, &found);
+            fprintf(fp, "%d-%d\t%lf\n", start.y, start.m+1, val);
+            date_inc(&start);
         }
         fclose(fp);
-        if (a->maxdate >= a->mindate) {
-            /* fprintf(stdout, "set title \"%s\"\n", a->longname); */
-            /* fprintf(stdout, "set xlabel \"Time\"\n"); */
-            /* fprintf(stdout, "set term dumb\n"); */
-            /* fprintf(stdout, "set xrange [0:%d]\n", monthdist(a->mindate, a->maxdate) + 1); */
-            /* fprintf(stdout, "set output \"%s.png\"\n", varname); */
-            if (nplotted++ == 0) {
-                fprintf(stdout, "plot \"%s\" title \"%s\" with linespoints", path, a->longname);
-            } else {
-                fprintf(stdout, ", \"%s\" title \"%s\" with linespoints", path, a->longname);
-            }
+        assert(a != NULL);
+        assert(path != NULL);
+        assert(a->longname != NULL);
+        if (na == 1) {
+            fprintf(stdout, "set title \"%s\"\n", a->longname);
+        }
+
+        if (nplotted++ == 0) {
+            fprintf(stdout, "plot \"%s\" using 1:2 title \"%s\" with linespoints", path, a->longname);
+        } else {
+            fprintf(stdout, ", \"%s\" using 1:2 title \"%s\" with linespoints", path, a->longname);
         }
     }
     fputs("\n", stdout);

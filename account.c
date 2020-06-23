@@ -17,6 +17,7 @@ int naccounts = 0;
 
 static bucket ** find_bucket(account *a, time_t date);
 static double eval_expense_income(account *a, int y, int m, int *found);
+static double eval_asset_liability(account *a, int y, int m, int *found);
 
 account *
 account_new(account_type type, char *name, char *longname)
@@ -34,6 +35,10 @@ account_new(account_type type, char *name, char *longname)
     case EXPENSE:
     case INCOME:
         a->eval = eval_expense_income;
+        break;
+    case ASSET:
+    case LIABILITY:
+        a->eval = eval_asset_liability;
         break;
     default:
         break;
@@ -180,27 +185,6 @@ account_find(char *name)
     fprintf(stderr, "Can't find account: %s\n", name);
     return NULL;
 }
-
-/* double */
-/* account_eval(account *acct, time_t date, int *ok) */
-/* { */
-/*     double rval; */
-/*     long bal; */
-/*     long dollars; */
-/*     long cents; */
-/*     switch (acct->typ) { */
-/*     case ACCT: */
-/*         bal = account_balance(acct, date, ok); */
-/*         dollars = bal / 100; */
-/*         cents = bal % 100; */
-/*         rval = dollars + (cents / 100.0); */
-/*         return rval; */
-/*     case VAR: */
-/*         return eval(acct->exp, date, ok); */
-/*     case NUM: */
-/*         return acct->dval; */
-/*     } */
-/* } */
 
 static int
 cmp(const void *x, const void *y)
@@ -349,5 +333,39 @@ eval_expense_income(account *a, int y, int m, int *found)
     if (found != NULL) {
         *found = (b != NULL);
     }
-    return ((b == NULL) ? 0.0 : max((*b)->dr, (*b)->cr) - min((*b)->dr, (*b)->cr)) / 100.0;
+    return (b == NULL) ? 0.0 : (max((*b)->dr, (*b)->cr) - min((*b)->dr, (*b)->cr)) / 100.0;
+}
+
+static bucket **
+fuzzy_find_bucket_by_key(account *a, int y, int m)
+{
+    int i;
+    int key;
+    bucket **pb;
+
+    key = y * 100 + m;
+    pb = NULL;
+    for (i = 0; i < a->nbuckets && a->buckets[i]->key <= key; ++i) {
+        if (a->buckets[i]->key == key) {
+            return &a->buckets[i];
+        } else {
+            pb = &a->buckets[i];
+        }
+    }
+    return pb;
+}
+
+static double
+eval_asset_liability(account *a, int y, int m, int *found)
+{
+    bucket **b;
+
+    b = fuzzy_find_bucket_by_key(a, y, m);
+    if (found != NULL) {
+        *found = (b != NULL);
+    }
+    if (b != NULL) {
+        return (max((*b)->dr, (*b)->cr) - min((*b)->dr, (*b)->cr)) / 100.0;
+    }
+    return (max(a->startdr, a->startcr) - min(a->startdr, a->startcr)) / 100.0;
 }
