@@ -297,15 +297,31 @@ plot(char *argv[], int argc)
 }
 
 static void
+print_amount(FILE *fp, long amt)
+{
+    int dollars;
+    int cents;
+    assert(fp != NULL);
+    dollars = amt / 100;
+    cents = amt % 100;
+    fprintf(fp, "%d.%02d", dollars, cents);
+}
+
+static void
 print_balance(time_t date)
 {
+    account *assets;
+    account *liabilities;
     int i;
     account *acct;
+    long bal;
+    
     puts("# Balance Sheet");
     puts("");
     puts("## Assets");
     puts("");
-    account_print(account_find("assets"), date, 0);
+    assets = account_find("assets");
+    account_print(assets, date, 0);
     /* for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) { */
     /*     if (acct->type != ASSET || acct->nparents != 0) */
     /*         continue; */
@@ -314,31 +330,42 @@ print_balance(time_t date)
     puts("");
     puts("## Liabilities");
     puts("");
-    account_print(account_find("liabilities"), date, 0);
+    liabilities = account_find("liabilities");
+    account_print(liabilities, date, 0);
     /* for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) { */
     /*     if (acct->type != LIABILITY || acct->nparents != 0) */
     /*         continue; */
     /*     account_print(acct, year, month, 0); */
     /* } */
     /* TODO: Display net worth */
+    bal = account_balance(assets, date) - account_balance(liabilities, date);
+    printf("\nNet Worth: ");
+    print_amount(stdout, bal);
+    fputs("\n", stdout);
 }
 
 static void
 print_income(time_t date)
 {
-    int i;
-    account *acct;
+    account *income;
+    account *expenses;
+    long bal;
     puts("");
     puts("# Income Statement");
     puts("");
     puts("## Income");
     puts("");
-    account_print(account_find("income"), date, 0);
+    income = account_find("income");
+    account_print(income, date, 0);
     puts("");
     puts("## Expenses");
     puts("");
-    account_print(account_find("expenses"), date, 0);
-    /* TODO: Display cashflow */
+    expenses = account_find("expenses");
+    account_print(expenses, date, 0);
+    printf("\nNet Income: ");
+    bal = account_balance(income, date) - account_balance(expenses, date);
+    print_amount(stdout, bal);
+    fputs("\n", stdout);
 }
 
 int

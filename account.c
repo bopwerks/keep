@@ -183,6 +183,7 @@ account_balance(account *a, time_t date)
         c = a->buckets[i-1];
         return max(c->dr, c->cr) - min(c->dr, c->cr);
     }
+    return 0;
 }
 
 void
