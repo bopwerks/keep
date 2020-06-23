@@ -1,6 +1,6 @@
 # keep
 
-`keep` is a language for tracking finances using the double-entry bookkeeping method. The user defines accounts with the `asset`, `liability`, `income`, and `expense` keywords; creates hierarchies of accounts with the `<-` operator; displaying balance sheets and income statements; automatically computes values or ratios of interest using the `track` keyword; and produces plots of these accounts or values using the `plot` subcommand.
+`keep` is a language for tracking finances using the double-entry bookkeeping method. The user defines accounts with the `asset`, `liability`, `income`, and `expense` keywords; creates hierarchies of accounts with the `<-` operator; displays balance sheets and income statements; automatically computes values or ratios of interest using the `track` keyword; and produces plots of these accounts or values using the `plot` subcommand.
 
 ## Example
 
