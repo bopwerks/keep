@@ -57,8 +57,8 @@ struct account {
     int nbuckets;
     int maxbuckets;
 
-    long debits;
-    long credits;
+    long startdr;
+    long startcr;
 
     double (*eval)(struct account *a, int year, int month, int *found);
 };
@@ -69,7 +69,7 @@ extern int naccounts;
 
 account* account_find(char *name);
 account* account_new(account_type type, char *name, char *longname);
-long     account_balance(account *acct, time_t date, int *ok);
+long     account_balance(account *acct, time_t date);
 int      account_connect(account *parent, account *child);
 void     account_print(account *acct, time_t date, int level);
 double   account_eval(account *acct, time_t date, int *ok);

@@ -23,8 +23,8 @@ extern FILE *yyin;
 static char *progname;
 static char *filename;
 
-static void print_balance(int year, int month);
-static void print_income(int year, int month);
+static void print_balance(time_t);
+static void print_income(time_t);
 
 /* Connect built-in accounts (income, expenses, liabilities, assets)
  * to the root accounts of their type.
@@ -194,9 +194,9 @@ main(int argc, char *argv[])
      * months in the range, evaluating the var with the year/month to
      * produce the bin value for that month. */
     if (!strcmp(argv[2], "balance")) {
-        print_balance(year, month);
+        print_balance(time(NULL));
     } else if (!strcmp(argv[2], "income")) {
-        print_income(year, month);
+        print_income(time(NULL));
     } else if (!strcmp(argv[2], "plot")) {
         if (argc < 4) {
             fprintf(stderr, "Usage: %s plot tracker-name\n", argv[0]);
@@ -297,7 +297,7 @@ plot(char *argv[], int argc)
 }
 
 static void
-print_balance(int year, int month)
+print_balance(time_t date)
 {
     int i;
     account *acct;
@@ -305,24 +305,26 @@ print_balance(int year, int month)
     puts("");
     puts("## Assets");
     puts("");
-    for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) {
-        if (acct->type != ASSET || acct->nparents != 0)
-            continue;
-        /* account_print(acct, 0); */
-    }
+    account_print(account_find("assets"), date, 0);
+    /* for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) { */
+    /*     if (acct->type != ASSET || acct->nparents != 0) */
+    /*         continue; */
+    /*     account_print(acct, date, 0); */
+    /* } */
     puts("");
     puts("## Liabilities");
     puts("");
-    for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) {
-        if (acct->type != LIABILITY || acct->nparents != 0)
-            continue;
-        /* account_print(acct, year, month, 0); */
-    }
+    account_print(account_find("liabilities"), date, 0);
+    /* for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) { */
+    /*     if (acct->type != LIABILITY || acct->nparents != 0) */
+    /*         continue; */
+    /*     account_print(acct, year, month, 0); */
+    /* } */
     /* TODO: Display net worth */
 }
 
 static void
-print_income(int year, int month)
+print_income(time_t date)
 {
     int i;
     account *acct;
@@ -331,19 +333,11 @@ print_income(int year, int month)
     puts("");
     puts("## Income");
     puts("");
-    for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) {
-        if (acct->type != INCOME || acct->nparents != 0)
-            continue;
-        /* account_print(acct, year, month, 0); */
-    }
+    account_print(account_find("income"), date, 0);
     puts("");
     puts("## Expenses");
     puts("");
-    for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) {
-        if (acct->type != EXPENSE || acct->nparents != 0)
-            continue;
-        /* account_print(acct, year, month, 0); */
-    }
+    account_print(account_find("expenses"), date, 0);
     /* TODO: Display cashflow */
 }
 
@@ -423,6 +417,9 @@ addtrans(account *a, transaction *tr)
         else
             a->maxdate = (tr->date > a->maxdate) ? tr->date : a->maxdate;
         account_bin(a, tr->date, tr->debit, tr->credit);
+    } else {
+        a->startdr += tr->debit;
+        a->startcr += tr->credit;
     }
 
     /* Update parents */
