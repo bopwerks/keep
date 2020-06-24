@@ -18,7 +18,6 @@ static int error;
 extern void yyparse(void);
 extern FILE *yyin;
 
-static char *progname;
 static char *filename;
 
 static void print_balance(time_t);
@@ -56,10 +55,10 @@ connect(void)
 }
 
 static int plot(char *argv[], int argc);
+static int ledger(char *argv[], int argc);
 
-/*
 static void
-tr_print(account *a, transaction *t)
+tr_print(FILE *fp, account *a, transaction *t)
 {
     struct tm tm;
     long amount;
@@ -71,23 +70,24 @@ tr_print(account *a, transaction *t)
     amount = (t->debit == 0.0) ? t->credit : t->debit;
     dollars = amount / 100;
     cents = amount % 100;
-    fprintf(stderr, "%10lx %d %s %2d %-16s %s %5ld.%02ld \"%s\"\n",
-            t->date,
-            tm.tm_year + 1900,
-            monthname(tm.tm_mon),
-            tm.tm_mday,
+    if (t->date == 0) {
+        fprintf(fp, "---- --- --");
+    } else {
+        fprintf(fp, "%d %s %2d", tm.tm_year + 1900,
+                monthname(tm.tm_mon),
+                tm.tm_mday);
+    }
+    fprintf(fp, " %s %s %6ld.%02ld \"%s\"\n",
             a->name,
             t->debit == 0.0 ? "cr" : "dr",
             dollars,
             cents,
             t->description);
 }
-*/
 
 int
 main(int argc, char *argv[])
 {
-    account *acct;
     int year;
     int month;
     time_t clock;
@@ -98,10 +98,10 @@ main(int argc, char *argv[])
 
     year = tm->tm_year + 1900;
     month = tm->tm_mon+1;
-    progname = argv[0];
+    setprogname(argv[0]);
     filename = argv[1];
     if (argc < 3) {
-        fprintf(stderr, "Usage: %s journal-file {balance|income|plot} ...\n", argv[0]);
+        fprintf(stderr, "Usage: %s journal-file {balance|income|ledger|plot} ...\n", argv[0]);
         return EXIT_FAILURE;
     }
     yyin = fopen(argv[1], "r");
@@ -113,17 +113,15 @@ main(int argc, char *argv[])
     account_new(LIABILITY, "liabilities", "Liabilities");
     account_new(EXPENSE, "expenses", "Expenses");
     account_new(INCOME, "income", "Income");
+
+    const_new("e", M_E);
+    const_new("pi", M_PI);
     
-    acct = account_new(EXPENSE, "e", "Euler's number");
-    acct->typ = NUM;
-    acct->dval = M_E;
-    acct = account_new(EXPENSE, "pi", "Pi");
-    acct->typ = NUM;
-    acct->dval = M_PI;
     yyparse();
     if (error) {
         return EXIT_FAILURE;
     }
+    
     if (!strcmp(argv[2], "balance")) {
         print_balance(time(NULL));
     } else if (!strcmp(argv[2], "income")) {
@@ -134,6 +132,12 @@ main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
         return plot(&argv[2], argc-2);
+    } else if (!strcmp(argv[2], "ledger")) {
+        if (argc < 4) {
+            fprintf(stderr, "Usage: %s ledger account ...\n", argv[0]);
+            return EXIT_FAILURE;
+        }
+        return ledger(&argv[2], argc-2);
     } else {
         fprintf(stderr, "%s: No such command: %s\n", argv[0], argv[2]);
         return EXIT_FAILURE;
@@ -216,6 +220,25 @@ date_add(date *d, int delta)
     int i;
     for (i = 0; i < abs(delta); ++i)
         ((delta < 0) ? date_dec : date_inc)(d);
+}
+
+static int
+ledger(char *argv[], int argc)
+{
+    account *a;
+    int i;
+    int j;
+    for (i = 1; i < argc; ++i) {
+        a = account_find(argv[i]);
+        if (a == NULL) {
+            fprintf(stderr, "%s: %s: Can't find account: %s\n", getprogname(), argv[0], argv[i]);
+            return EXIT_FAILURE;
+        }
+        for (j = 0; j < a->ntr; ++j) {
+            tr_print(stdout, a, a->tr[j]);
+        }
+    }
+    return EXIT_SUCCESS;
 }
 
 static int

@@ -40,9 +40,9 @@ liability { yylval.val = LIABILITY; return ACCOUNT; }
 income { yylval.val = INCOME; return INCOMETOK; }
 expense { yylval.val = EXPENSE; return ACCOUNT; }
 ["]([^"\\]|\\.)*["] {
-  strncpy(str, yytext+1, yyleng-2);
-  yylval.str = str;
-  str[yyleng-2] = '\0';
+  /*strncpy(str, yytext+1, yyleng-2);*/
+  yylval.str = install(yytext+1, yyleng-2);
+  /*str[yyleng-2] = '\0';*/
   return STRING;
 }
 [+-/*^()] { return *yytext; }

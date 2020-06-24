@@ -175,7 +175,6 @@ account_find(char *name)
         if (strcmp(accounts[i]->name, name) == 0)
             return accounts[i];
     }
-    fprintf(stderr, "Can't find account: %s\n", name);
     return NULL;
 }
 

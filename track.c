@@ -110,3 +110,30 @@ tracker_new(char *name, char *longname, expr *e)
     a->eval = eval_var;
     return a;
 }
+
+static double
+eval_const(account *a, int y, int m)
+{
+    assert(a != NULL);
+    return a->dval;
+}
+
+
+account *
+const_new(char *name, double val)
+{
+    account *a;
+
+    assert(name && "name is null");
+
+    a = calloc(1, sizeof *a + strlen(name) + 1);
+    if (a == NULL)
+        return NULL;
+    a->typ = CONST;
+    a->name = a->longname = ((char *) a) + (sizeof *a);
+    strcpy(a->name, name);
+    a->dval = val;
+    a->eval = eval_const;
+    accounts[naccounts++] = a;
+    return a;
+}

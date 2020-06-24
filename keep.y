@@ -9,8 +9,8 @@
 
 static long totdr = 0;
 static long totcr = 0;
-static char explanation[1024];
-static char trexplanation[1024];
+/* static char explanation[1024]; */
+static char *description;
 static double dval;
 
 time_t currdate;
@@ -53,7 +53,7 @@ extern void connect(void);
 %type <acct> accountdef
 /*%type <acct> account*/
 %type <acct> variable
-%type <str> comment
+%type <str> initcomment
 %type <exp> varexpr
 %type <acct> account
 
@@ -99,18 +99,18 @@ accountdef: ACCOUNT NAME STRING initial_balance {
     addtrans(a, $4);
 }
 
-initial_balance: DEBIT  NUMBER comment { $$ = newtrans(0, $3, cents($2), 0); }
-               | CREDIT NUMBER comment { $$ = newtrans(0, $3, 0, cents($2)); }
+initial_balance: DEBIT  NUMBER initcomment { $$ = newtrans(0, $3, cents($2), 0); }
+               | CREDIT NUMBER initcomment { $$ = newtrans(0, $3, 0, cents($2)); }
                | /* nothing */         { $$ = NULL; }
                ;
 
-comment: STRING
-       | { $$ = NULL; }
-       ;
+initcomment: STRING
+           | { $$ = "Starting balance"; }
+           ;
 
 transaction: DATE STRING {
     currdate = $1;
-    strcpy(explanation, $2);
+    description = $2;;
     totdr = totcr = 0;
 } entries;
 
@@ -118,11 +118,11 @@ entries: entries entry
        | entry
        ;
 
-entry: account DEBIT NUMBER comment { totdr += cents($3);
-                                   addtrans($1, newtrans(currdate, trexplanation, cents($3), 0.0));
+entry: account DEBIT NUMBER { totdr += cents($3);
+                                   addtrans($1, newtrans(currdate, description, cents($3), 0.0));
                                    }
-     | account CREDIT NUMBER comment { totcr += cents($3);
-                                    addtrans($1, newtrans(currdate, trexplanation, 0, cents($3)));
+     | account CREDIT NUMBER { totcr += cents($3);
+                                    addtrans($1, newtrans(currdate, description, 0, cents($3)));
                                     }
      ;
 
