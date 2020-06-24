@@ -35,11 +35,9 @@ connect(void)
         "income",
         "expenses"
     };
-
     account *a;
     account *b;
     int i;
-    int j;
 
     for (i = 0, a = accounts[i]; i < naccounts; a = accounts[++i]) {
         b = account_find(name[a->type]);
@@ -48,9 +46,6 @@ connect(void)
         }
         assert(b != NULL);
         account_connect(b, a);
-        for (j = 0; j < a->ntr; ++j) {
-            addtrans(b, a->tr[j]);
-        }
     }
 }
 
@@ -354,22 +349,15 @@ print_income(time_t date)
     account *income;
     account *expenses;
     double bal;
-    puts("");
     puts("# Income Statement");
-    puts("");
-    puts("## Income");
-    puts("");
+    puts("\n## Income\n");
     income = account_find("income");
     account_print(income, date, 0);
-    puts("");
-    puts("## Expenses");
-    puts("");
+    puts("\n## Expenses\n");
     expenses = account_find("expenses");
     account_print(expenses, date, 0);
-    printf("\nNet Income: ");
     bal = account_eval(income, date) - account_eval(expenses, date);
-    printf("%.2f\n", bal);
-    fputs("\n", stdout);
+    printf("\nNet Income: %.2f\n", bal);
 }
 
 int

@@ -65,7 +65,7 @@ extern int naccounts;
 account* account_find(char *name);
 account* account_new(account_type type, char *name, char *longname);
 int      account_connect(account *parent, account *child);
-long     account_eval(account *a, time_t t);
+double     account_eval(account *a, time_t t);
 void     account_bin(account *a, time_t date, long dr, long cr);
 void     account_print(account *acct, time_t date, int level);
 account* const_new(char *name, double val);
