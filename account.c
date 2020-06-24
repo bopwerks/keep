@@ -18,6 +18,7 @@ int naccounts = 0;
 static bucket ** find_bucket(account *a, time_t date);
 static double eval_expense_income(account *a, int y, int m);
 static double eval_asset_liability(account *a, int y, int m);
+static long balance(account_type type, long dr, long cr);
 
 account *
 account_new(account_type type, char *name, char *longname)
@@ -42,8 +43,6 @@ account_new(account_type type, char *name, char *longname)
     default:
         break;
     }
-    /* a->mindate = 0; */
-    /* a->maxdate = 0; */
     a->name = malloc(strlen(name) + 1);
     if (a->name == NULL) {
         free(a);
@@ -269,15 +268,11 @@ static double
 eval_expense_income(account *a, int y, int m)
 {
     bucket **b;
-    long bal;
-    
     b = find_bucket_by_key(a, y, m);
     if (b == NULL) {
         return 0.0;
     }
-    bal = max((*b)->dr, (*b)->cr) - min((*b)->dr, (*b)->cr);
-    /* printf("%s dollars = %ld cents = %ld rval = %f\n", a->name, dollars, cents, rval); */
-    return bal / 100.0;
+    return balance(a->type, (*b)->dr, (*b)->cr) / 100.0;
 }
 
 static bucket **
@@ -299,6 +294,33 @@ fuzzy_find_bucket_by_key(account *a, int y, int m)
     return pb;
 }
 
+static long
+balance(account_type type, long dr, long cr)
+{
+    long lhs;
+    long rhs;
+    
+    switch (type) {
+    case ASSET:
+        lhs = dr;
+        rhs = cr;
+        break;
+    case LIABILITY:
+        lhs = cr;
+        rhs = dr;
+        break;
+    case INCOME:
+        lhs = cr;
+        rhs = dr;
+        break;
+    case EXPENSE:
+        lhs = dr;
+        rhs = cr;
+        break;
+    }
+    return lhs - rhs;
+}
+
 static double
 eval_asset_liability(account *a, int y, int m)
 {
@@ -306,7 +328,7 @@ eval_asset_liability(account *a, int y, int m)
 
     b = fuzzy_find_bucket_by_key(a, y, m);
     if (b != NULL) {
-        return (max((*b)->dr, (*b)->cr) - min((*b)->dr, (*b)->cr)) / 100.0;
+        return balance(a->type, (*b)->dr, (*b)->cr) / 100.0;
     }
-    return (max(a->dr, a->cr) - min(a->dr, a->cr)) / 100.0;
+    return balance(a->type, a->dr, a->cr) / 100.0;
 }
