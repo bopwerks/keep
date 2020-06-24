@@ -16,15 +16,14 @@ account *accounts[MAXACCT];
 int naccounts = 0;
 
 static bucket ** find_bucket(account *a, time_t date);
-static double eval_expense_income(account *a, int y, int m, int *found);
-static double eval_asset_liability(account *a, int y, int m, int *found);
+static double eval_expense_income(account *a, int y, int m);
+static double eval_asset_liability(account *a, int y, int m);
 
 account *
 account_new(account_type type, char *name, char *longname)
 {
     account *a;
 
-    /* fprintf(stderr, "Creating new account '%s'\n", name); */
     a = calloc(1, sizeof *a);
     if (a == NULL) {
         return NULL;
@@ -43,8 +42,8 @@ account_new(account_type type, char *name, char *longname)
     default:
         break;
     }
-    a->mindate = 0;
-    a->maxdate = 0;
+    /* a->mindate = 0; */
+    /* a->maxdate = 0; */
     a->name = malloc(strlen(name) + 1);
     if (a->name == NULL) {
         free(a);
@@ -89,7 +88,6 @@ account_connect(account *parent, account *child)
         return 0;
     }
     child->parent = parent;
-    child->nparents += 1;
     /* if (child->nparents > 1) { */
     /*     fprintf(stderr, "More than one connection from %s found while connecting to %s\n", */
     /*             child->name, parent->name); */
@@ -98,70 +96,66 @@ account_connect(account *parent, account *child)
     return 1;
 }
 
-static int
-datekey(time_t t)
-{
-    struct tm tm;
-    localtime_r(&t, &tm);
-    return (tm.tm_year + 1900) * 100 + (tm.tm_mon + 1);
-}
+/* static int */
+/* datekey(time_t t) */
+/* { */
+/*     struct tm tm; */
+/*     localtime_r(&t, &tm); */
+/*     return (tm.tm_year + 1900) * 100 + (tm.tm_mon + 1); */
+/* } */
 
-long
-account_balance(account *a, time_t date)
-{
-    struct tm tm;
-    bucket **b;
-    bucket *c;
-    int y;
-    int m;
-    int key;
-    int i;
-    /* TODO: If date is less than earliest bucket, return starting
-     * balance or error. If it's greater than last bucket, return last
-     * bucket
-     */
-    assert(a != NULL);
-    localtime_r(&date, &tm);
-    y = tm.tm_year + 1900;
-    m = tm.tm_mon + 1;
-    key = y * 100 + m;
+/* long */
+/* account_balance(account *a, time_t date) */
+/* { */
+/*     struct tm tm; */
+/*     bucket **b; */
+/*     bucket *c; */
+/*     int y; */
+/*     int m; */
+/*     int key; */
+/*     int i; */
+/*     /\* TODO: If date is less than earliest bucket, return starting */
+/*      * balance or error. If it's greater than last bucket, return last */
+/*      * bucket */
+/*      *\/ */
+/*     assert(a != NULL); */
+/*     localtime_r(&date, &tm); */
+/*     y = tm.tm_year + 1900; */
+/*     m = tm.tm_mon + 1; */
+/*     key = y * 100 + m; */
 
-    b = find_bucket(a, date);
-    if (b != NULL) {
-        return max((*b)->dr, (*b)->cr) - min((*b)->dr, (*b)->cr);
-    }
-    if (a->type == INCOME || a->type == EXPENSE) {
-        return 0;
-    }
-    if (datekey(date) < datekey(a->mindate) || a->nbuckets == 0) {
-        /* TODO: Error */
-        return 0;
-    }
-    for (i = 0; i < a->nbuckets && a->buckets[i]->key < key; ++i)
-        ;
-    if (i > 0) {
-        c = a->buckets[i-1];
-        return max(c->dr, c->cr) - min(c->dr, c->cr);
-    }
-    return 0;
-}
+/*     b = find_bucket(a, date); */
+/*     if (b != NULL) { */
+/*         return max((*b)->dr, (*b)->cr) - min((*b)->dr, (*b)->cr); */
+/*     } */
+/*     if (a->type == INCOME || a->type == EXPENSE) { */
+/*         return 0; */
+/*     } */
+/*     if (datekey(date) < datekey(a->mindate) || a->nbuckets == 0) { */
+/*         /\* TODO: Error *\/ */
+/*         return 0; */
+/*     } */
+/*     for (i = 0; i < a->nbuckets && a->buckets[i]->key < key; ++i) */
+/*         ; */
+/*     if (i > 0) { */
+/*         c = a->buckets[i-1]; */
+/*         return max(c->dr, c->cr) - min(c->dr, c->cr); */
+/*     } */
+/*     return 0; */
+/* } */
 
 void
 account_print(account *acct, time_t date, int level)
 {
     int i;
-    long bal;
-    int dollars;
-    int cents;
+    double bal;
 
     assert(acct != NULL);
-    bal = account_balance(acct, date);
-    dollars = bal / 100;
-    cents = bal % 100;
+    bal = account_eval(acct, date);
     for (i = 0; i < level; ++i) {
         putchar('\t');
     }
-    printf("%s %d.%02d\n", acct->longname, dollars, cents);
+    printf("%s %.2f\n", acct->longname, bal);
     for (i = 0; i < acct->naccounts; ++i) {
         if (acct->accounts[i]->typ == ACCT) {
             account_print(acct->accounts[i], date, level+1);
@@ -175,7 +169,6 @@ account_find(char *name)
     int i;
 
     assert(name != NULL);
-    /* fprintf(stderr, "Looking for account '%s'\n", name); */
     for (i = 0; i < naccounts; ++i) {
         assert(accounts[i] != NULL);
         assert(accounts[i]->name != NULL);
@@ -186,6 +179,16 @@ account_find(char *name)
     return NULL;
 }
 
+long
+account_eval(account *a, time_t t)
+{
+    struct tm tm;
+    assert(a != NULL);
+
+    localtime_r(&t, &tm);
+    return a->eval(a, tm.tm_year + 1900, tm.tm_mon + 1);
+}
+
 static int
 cmp(const void *x, const void *y)
 {
@@ -194,7 +197,6 @@ cmp(const void *x, const void *y)
 
     key = *((int *) x);
     b = (bucket **) y;
-    /* fprintf(stderr, "Search Key = %d Bucket Key = %d\n", key, (*b)->key); */
 
     return key - (*b)->key;
 }
@@ -215,10 +217,8 @@ find_bucket(account *a, time_t date)
     key = y * 100 + m;
     rval = bsearch((void *) &key, a->buckets, a->nbuckets, sizeof *(a->buckets), cmp);
     if (rval == NULL) {
-        /* fprintf(stderr, "Can't find key %d\n", key); */
         return NULL;
     } else {
-        /* fprintf(stderr, "Found key %d\n", key); */
         return rval;
     }
 }
@@ -232,10 +232,8 @@ find_bucket_by_key(account *a, int y, int m)
     key = y * 100 + m;
     rval = bsearch((void *) &key, a->buckets, a->nbuckets, sizeof *(a->buckets), cmp);
     if (rval == NULL) {
-        /* fprintf(stderr, "Can't find key %d in account %s\n", key, a->name); */
         return NULL;
     } else {
-        /* fprintf(stderr, "Found key %d in %s\n", key, a->name); */
         return rval;
     }
 }
@@ -256,7 +254,6 @@ add_bucket(account *a, time_t date)
     int i;
     assert(a != NULL);
 
-    /* fprintf(stderr, "%s nbuckets = %d maxbuckets = %d\n", a->name, a->nbuckets, a->maxbuckets); */
     if (a->nbuckets == a->maxbuckets) {
         if (!array_grow((void **) &a->buckets, a->maxbuckets * 2, sizeof *(a->buckets))) {
             return NULL;
@@ -278,7 +275,6 @@ add_bucket(account *a, time_t date)
         a->buckets[i] = tmpb;
     }
     a->nbuckets += 1;
-    /* fprintf(stderr, "Added bucket %d\n", b->key); */
     return rval;
 }
 
@@ -304,35 +300,26 @@ account_bin(account *a, time_t date, long dr, long cr)
         case LIABILITY:
             if (b == a->buckets) {
                 /* Initialize bucket with account starting balance */
-                /* fprintf(stderr, "Initializing bucket %d with account %s starting dr %ld cr %ld\n", */
-                /*         (*b)->key, a->name, a->startdr, a->startcr); */
-                (*b)->dr = a->startdr;
-                (*b)->cr = a->startcr;
+                (*b)->dr = a->dr;
+                (*b)->cr = a->cr;
             } else {
                 c = *(b - 1);
                 /* Initialize bucket with last month's ending balance */
-                /* fprintf(stderr, "Initializing account %s bucket %d with bucket %d dr %ld cr %ld\n", */
-                /*         a->name, (*b)->key, c->key, c->dr, c->cr); */
                 (*b)->dr = c->dr;
                 (*b)->cr = c->cr;
             }
         }
     }
-    /* fprintf(stderr, "Updated bucket %d for account %s dr %ld cr %ld\n", (*b)->key, a->name, dr, cr); */
     (*b)->dr += dr;
     (*b)->cr += cr;
-    /* fprintf(stderr, "account %-10s bucket %6d dr %6ld cr %6ld\n", a->name, (*b)->key, (*b)->dr, (*b)->cr); */
 }
 
 static double
-eval_expense_income(account *a, int y, int m, int *found)
+eval_expense_income(account *a, int y, int m)
 {
     bucket **b;
     
     b = find_bucket_by_key(a, y, m);
-    if (found != NULL) {
-        *found = (b != NULL);
-    }
     return (b == NULL) ? 0.0 : (max((*b)->dr, (*b)->cr) - min((*b)->dr, (*b)->cr)) / 100.0;
 }
 
@@ -356,16 +343,13 @@ fuzzy_find_bucket_by_key(account *a, int y, int m)
 }
 
 static double
-eval_asset_liability(account *a, int y, int m, int *found)
+eval_asset_liability(account *a, int y, int m)
 {
     bucket **b;
 
     b = fuzzy_find_bucket_by_key(a, y, m);
-    if (found != NULL) {
-        *found = (b != NULL);
-    }
     if (b != NULL) {
         return (max((*b)->dr, (*b)->cr) - min((*b)->dr, (*b)->cr)) / 100.0;
     }
-    return (max(a->startdr, a->startcr) - min(a->startdr, a->startcr)) / 100.0;
+    return (max(a->dr, a->cr) - min(a->dr, a->cr)) / 100.0;
 }

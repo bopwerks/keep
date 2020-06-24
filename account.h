@@ -5,12 +5,12 @@ enum {
     MAXSUB = 64
 };
 
-enum var_type {
+enum obj_type {
     ACCT,
     VAR,
     NUM,
 };
-typedef enum var_type var_type;
+typedef enum obj_type obj_type;
 
 enum account_type {
     ASSET,
@@ -30,7 +30,7 @@ struct bucket {
 typedef struct bucket bucket;
 
 struct account {
-    var_type typ;
+    obj_type typ;
     account_type type;
     
     char *name;
@@ -40,27 +40,22 @@ struct account {
     int naccounts;
 
     struct account *parent;
-    int nparents;
     
     struct transaction **tr;
     int ntr;
     int trcap;
 
-    struct account *aval;
     double dval;
     expr *exp;
-
-    time_t mindate;
-    time_t maxdate;
 
     bucket **buckets;
     int nbuckets;
     int maxbuckets;
 
-    long startdr;
-    long startcr;
+    long dr;
+    long cr;
 
-    double (*eval)(struct account *a, int year, int month, int *found);
+    double (*eval)(struct account *a, int year, int month);
 };
 typedef struct account account;
 
@@ -69,8 +64,7 @@ extern int naccounts;
 
 account* account_find(char *name);
 account* account_new(account_type type, char *name, char *longname);
-long     account_balance(account *acct, time_t date);
 int      account_connect(account *parent, account *child);
-void     account_print(account *acct, time_t date, int level);
-double   account_eval(account *acct, time_t date, int *ok);
+long     account_eval(account *a, time_t t);
 void     account_bin(account *a, time_t date, long dr, long cr);
+void     account_print(account *acct, time_t date, int level);

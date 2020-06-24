@@ -30,7 +30,7 @@ char num[16];
   yylval.time = mktime(&tm);
   return DATE;
 }
-[0-9]+\.?|[0-9]*\.[0-9][0-9] { strncpy(num, yytext, yyleng);
+[0-9]+|[0-9]*\.[0-9]+ { strncpy(num, yytext, yyleng);
                                num[yyleng] = '\0';
                                yylval.str = num;
                                return NUMBER; }

@@ -88,12 +88,10 @@ int
 main(int argc, char *argv[])
 {
     account *acct;
-    int i;
     int year;
     int month;
     time_t clock;
     struct tm *tm;
-    range r;
 
     time(&clock);
     tm = localtime(&clock);
@@ -106,10 +104,6 @@ main(int argc, char *argv[])
         fprintf(stderr, "Usage: %s journal-file {balance|income|plot} ...\n", argv[0]);
         return EXIT_FAILURE;
     }
-    /* if (argc == 4) { */
-    /*     year = strtol(argv[2], NULL, 10); */
-    /*     month = strtol(argv[3], NULL, 10); */
-    /* } */
     yyin = fopen(argv[1], "r");
     if (yyin == NULL) {
         fprintf(stderr, "%s: %s\n", argv[0], strerror(errno));
@@ -130,56 +124,6 @@ main(int argc, char *argv[])
     if (error) {
         return EXIT_FAILURE;
     }
-    for (i = 0; i < naccounts; ++i) {
-        acct = accounts[i];
-        if (acct->typ != VAR)
-            continue;
-        /* TODO: Traverse the var expr to compute the start and end
-         * dates for the var. Constants have infinite
-         * distance. Accounts have whatever distance was computed
-         * during the binning process. Vars have whatever is computed
-         * here. The start date will be the maximum of the start dates
-         * of all vars/accounts named, and the end date will be the
-         * minimum of the end dates of all vars/accounts named.
-         */
-        r = expr_range(acct->exp);
-        acct->mindate = r.start;
-        acct->maxdate = r.end;
-    }
-    /*
-    for (i = 0; i < naccounts; ++i) {
-        struct tm tm;
-        acct = accounts[i];
-        fputs(acct->name, stderr);
-        fputs("\n", stderr);
-        localtime_r(&acct->mindate, &tm);
-        strftime(buf1, sizeof buf1, "%Y %b %d", &tm);
-        localtime_r(&acct->maxdate, &tm);
-        strftime(buf2, sizeof buf2, "%Y %b %d", &tm);
-        fprintf(stderr, "range %s (%ld) to %s (%ld)\n", buf1, acct->mindate, buf2, acct->maxdate);
-        fputs("\n", stderr);
-        if (acct->ntr == 0)
-            continue;
-        if (acct->typ != ACCT)
-            continue;
-        for (j = 0; j < acct->ntr; ++j) {
-            tr_print(acct, acct->tr[j]);
-        }
-        if (acct->ntr > 0)
-            fputs("\n", stderr);
-        for (j = 0; j < acct->nbuckets; ++j) {
-            b = acct->buckets[j];
-            fprintf(stderr, "%4d %s dr %ld cr %ld\n", b->key / 100, monthname(b->key % 100 - 1), b->dr, b->cr);
-        }
-        if (acct->nbuckets > 0)
-            fputs("\n", stderr);
-    }
-    */
-    /* TODO: Do the same binning process for vars. Take the
-     * intersection of the months available for each account named and
-     * set start and end dates for the var. Then iterate over the
-     * months in the range, evaluating the var with the year/month to
-     * produce the bin value for that month. */
     if (!strcmp(argv[2], "balance")) {
         print_balance(time(NULL));
     } else if (!strcmp(argv[2], "income")) {
@@ -277,14 +221,13 @@ date_add(date *d, int delta)
 static int
 plot(char *argv[], int argc)
 {
-    enum { NMONTHS = 4 };
+    enum { NMONTHS = 6 };
     account *accts[10];
     int na;
     FILE *fp;
     account *a;
     char *path;
     int i;
-    int found;
     int nplotted = 0;
     double val;
     char tmp[] = "/tmp/keep.XXX";
@@ -310,6 +253,14 @@ plot(char *argv[], int argc)
     date_add(&start, -NMONTHS);
     fprintf(stdout, "set xrange [\"%d-%d\":\"%d-%d\"]\n", start.y, start.m+1, end.y, end.m+1);
     fprintf(stdout, "set format x \"%%Y/%%m\"\n");
+    fprintf(stdout, "set xtics (");
+    for (i = 0; date_cmp(&start, &end) <= 0; ++i) {
+        if (i > 0)
+            fprintf(stdout, ", ");
+        fprintf(stdout, "\"%d-%d\"", start.y, start.m+1);
+        date_inc(&start);
+    }
+    fprintf(stdout, ")\n");
     /* fprintf(stdout, "set term dumb\n"); */
     /* fprintf(stdout, "set output \"%s.png\"\n", varname); */
     for (i = 0; i < na; ++i) {
@@ -329,7 +280,7 @@ plot(char *argv[], int argc)
             return EXIT_FAILURE;
         }
         while (date_cmp(&start, &end) <= 0) {
-            val = a->eval(a, start.y, start.m, &found);
+            val = a->eval(a, start.y, start.m+1);
             fprintf(fp, "%d-%d\t%lf\n", start.y, start.m+1, val);
             date_inc(&start);
         }
@@ -352,22 +303,11 @@ plot(char *argv[], int argc)
 }
 
 static void
-print_amount(FILE *fp, long amt)
-{
-    int dollars;
-    int cents;
-    assert(fp != NULL);
-    dollars = amt / 100;
-    cents = amt % 100;
-    fprintf(fp, "%d.%02d", dollars, cents);
-}
-
-static void
 print_balance(time_t date)
 {
     account *assets;
     account *liabilities;
-    long bal;
+    double bal;
     
     puts("# Balance Sheet");
     puts("");
@@ -375,25 +315,13 @@ print_balance(time_t date)
     puts("");
     assets = account_find("assets");
     account_print(assets, date, 0);
-    /* for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) { */
-    /*     if (acct->type != ASSET || acct->nparents != 0) */
-    /*         continue; */
-    /*     account_print(acct, date, 0); */
-    /* } */
     puts("");
     puts("## Liabilities");
     puts("");
     liabilities = account_find("liabilities");
     account_print(liabilities, date, 0);
-    /* for (i = 0, acct = accounts[i]; i < naccounts; acct = accounts[++i]) { */
-    /*     if (acct->type != LIABILITY || acct->nparents != 0) */
-    /*         continue; */
-    /*     account_print(acct, year, month, 0); */
-    /* } */
-    /* TODO: Display net worth */
-    bal = account_balance(assets, date) - account_balance(liabilities, date);
-    printf("\nNet Worth: ");
-    print_amount(stdout, bal);
+    bal = account_eval(assets, date) - account_eval(liabilities, date);
+    printf("\nNet Worth: %.2f", bal);
     fputs("\n", stdout);
 }
 
@@ -402,7 +330,7 @@ print_income(time_t date)
 {
     account *income;
     account *expenses;
-    long bal;
+    double bal;
     puts("");
     puts("# Income Statement");
     puts("");
@@ -416,8 +344,8 @@ print_income(time_t date)
     expenses = account_find("expenses");
     account_print(expenses, date, 0);
     printf("\nNet Income: ");
-    bal = account_balance(income, date) - account_balance(expenses, date);
-    print_amount(stdout, bal);
+    bal = account_eval(income, date) - account_eval(expenses, date);
+    printf("%.2f\n", bal);
     fputs("\n", stdout);
 }
 
@@ -463,8 +391,6 @@ addtrans(account *a, transaction *tr)
     transaction *tmptr;
     int i;
 
-    /* fprintf(stderr, "Adding transaction to %s\n", a->name); */
-
     /* Insert transaction into transaction list in ascending time order */
     if (a->ntr == a->trcap) {
         if (!array_grow((void **) &a->tr, a->trcap * 2, sizeof *a->tr)) {
@@ -482,22 +408,14 @@ addtrans(account *a, transaction *tr)
     a->ntr += 1;
 
     /* Update date range */
-    if (tr->date != 0) {
-        if (a->mindate == 0)
-            a->mindate = tr->date;
-        else
-            a->mindate = (tr->date < a->mindate) ? tr->date : a->mindate;
-        if (a->maxdate == 0)
-            a->maxdate = tr->date;
-        else
-            a->maxdate = (tr->date > a->maxdate) ? tr->date : a->maxdate;
-        account_bin(a, tr->date, tr->debit, tr->credit);
+    if (tr->date == 0) {
+        a->dr += tr->debit;
+        a->cr += tr->credit;
     } else {
-        a->startdr += tr->debit;
-        a->startcr += tr->credit;
-    }
+        account_bin(a, tr->date, tr->debit, tr->credit);
+    }        
 
-    /* Update parents */
+    /* Update parent */
     if (a->parent != NULL) {
         addtrans(a->parent, tr);
     }
