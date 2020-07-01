@@ -20,8 +20,8 @@ extern FILE *yyin;
 
 static char *filename;
 
-static void print_balance(time_t);
-static void print_income(time_t);
+static int print_balance(int argc, char *argv[]);
+static int print_income(int argc, char *argv[]);
 
 /* Connect built-in accounts (income, expenses, liabilities, assets)
  * to the root accounts of their type.
@@ -49,8 +49,8 @@ connect(void)
     }
 }
 
-static int plot(char *argv[], int argc);
-static int ledger(char *argv[], int argc);
+static int plot(int argc, char *argv[]);
+static int ledger(int argc, char *argv[]);
 
 static void
 tr_print(FILE *fp, account *a, transaction *t)
@@ -80,13 +80,25 @@ tr_print(FILE *fp, account *a, transaction *t)
             t->description);
 }
 
+#define NELEM(a) (sizeof (a) / sizeof (a)[0])
+
 int
 main(int argc, char *argv[])
 {
     int year;
     int month;
+    int i;
     time_t clock;
     struct tm *tm;
+    struct {
+        char *cmd;
+        int (*fn)(int argc, char *argv[]);
+    } cmds[] = {
+        { "balance", print_balance },
+        { "income", print_income },
+        { "ledger", ledger },
+        { "plot", plot }
+    };
 
     time(&clock);
     tm = localtime(&clock);
@@ -116,28 +128,14 @@ main(int argc, char *argv[])
     if (error) {
         return EXIT_FAILURE;
     }
-    
-    if (!strcmp(argv[2], "balance")) {
-        print_balance(time(NULL));
-    } else if (!strcmp(argv[2], "income")) {
-        print_income(time(NULL));
-    } else if (!strcmp(argv[2], "plot")) {
-        if (argc < 4) {
-            fprintf(stderr, "Usage: %s plot tracker-name\n", argv[0]);
-            return EXIT_FAILURE;
+
+    for (i = 0; i < NELEM(cmds); ++i) {
+        if (!strcmp(argv[2], cmds[i].cmd)) {
+            return cmds[i].fn(argc-2, argv+2);
         }
-        return plot(&argv[2], argc-2);
-    } else if (!strcmp(argv[2], "ledger")) {
-        if (argc < 4) {
-            fprintf(stderr, "Usage: %s ledger account ...\n", argv[0]);
-            return EXIT_FAILURE;
-        }
-        return ledger(&argv[2], argc-2);
-    } else {
-        fprintf(stderr, "%s: No such command: %s\n", argv[0], argv[2]);
-        return EXIT_FAILURE;
     }
-    return EXIT_SUCCESS;
+    fprintf(stderr, "%s: No such command: %s\n", argv[0], argv[2]);
+    return EXIT_FAILURE;
 }
 
 static int
@@ -218,7 +216,7 @@ date_add(date *d, int delta)
 }
 
 static int
-ledger(char *argv[], int argc)
+ledger(int argc, char *argv[])
 {
     account *a;
     int i;
@@ -237,7 +235,7 @@ ledger(char *argv[], int argc)
 }
 
 static int
-plot(char *argv[], int argc)
+plot(int argc, char *argv[])
 {
     enum { NMONTHS = 6 };
     account *accts[10];
@@ -320,13 +318,15 @@ plot(char *argv[], int argc)
     return EXIT_SUCCESS;
 }
 
-static void
-print_balance(time_t date)
+static int
+print_balance(int argc, char *argv[])
 {
     account *assets;
     account *liabilities;
     double bal;
-    
+    time_t date;
+
+    date = time(NULL);
     puts("# Balance Sheet");
     puts("");
     puts("## Assets");
@@ -341,14 +341,18 @@ print_balance(time_t date)
     bal = account_eval(assets, date) - account_eval(liabilities, date);
     printf("\nNet Worth: %.2f", bal);
     fputs("\n", stdout);
+    return EXIT_SUCCESS;
 }
 
-static void
-print_income(time_t date)
+static int
+print_income(int argc, char *argv[])
 {
     account *income;
     account *expenses;
     double bal;
+    time_t date;
+
+    date = time(NULL);
     puts("# Income Statement");
     puts("\n## Income\n");
     income = account_find("income");
@@ -358,6 +362,7 @@ print_income(time_t date)
     account_print(expenses, date, 0);
     bal = account_eval(income, date) - account_eval(expenses, date);
     printf("\nNet Income: %.2f\n", bal);
+    return EXIT_SUCCESS;
 }
 
 int

@@ -27,6 +27,11 @@ eval(expr *e, int y, int m)
     case EXPR_MUL:
         left = eval(e->left, y, m);
         right = eval(e->right, y, m);
+        /* printf("Multiplying "); */
+        /* expr_print(stdout, e->left); */
+        /* printf(" and "); */
+        /* expr_print(stdout, e->right); */
+        /* printf("\n"); */
         return left * right;
     case EXPR_DIV:
         left = eval(e->left, y, m);
@@ -70,7 +75,7 @@ expr_print(FILE *fp, expr *e)
 }
 
 expr *
-expr_new(expr_type type, account *aval, long ival, expr *left, expr *right)
+expr_new(expr_type type, account *aval, double ival, expr *left, expr *right)
 {
     expr *e;
 

@@ -84,7 +84,7 @@ connection: connection ARROW accountdef { if (!account_connect($1, $3)) {
                                           $$ = $3;
                                         }
           | accountdef { $$ = $1; }
-          | NAME { $$ = account_find($1); }
+          | NAME { if (($$ = account_find($1)) == NULL) return yyerror("Can't find account"); }
           ;
 
 accountdef: ACCOUNT NAME STRING initial_balance {
@@ -126,7 +126,7 @@ entry: account DEBIT NUMBER { totdr += cents($3);
                                     }
      ;
 
-account: NAME { $$ = account_find($1); }
+account: NAME { if (($$ = account_find($1)) == NULL) return yyerror("Can't find account"); }
 
 variable: TRACK NAME STRING varexpr { $$ = tracker_new($2, $3, $4); };
 
